@@ -7,7 +7,7 @@
 <meta name="application-name" content="Lanternfall">
 <meta name="apple-mobile-web-app-title" content="Lanternfall">
 <meta name="generator" content="Lanternfall build.py">
-<meta name="version" content="1.0.0">
+<meta name="version" content="1.0.1">
 <meta name="format-detection" content="telephone=no">
 <meta name="color-scheme" content="dark">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%2305040a'/><rect x='22' y='10' width='20' height='6' rx='2' fill='%236b4a1f'/><path d='M18 20h28l-3 32H21z' fill='%232a1d14' stroke='%23c9a46a' stroke-width='3'/><path d='M32 26c6 7 7 12 0 20c-7-8-6-13 0-20z' fill='%23ffb347'/><circle cx='32' cy='40' r='3.5' fill='%23fff3c0'/></svg>">
@@ -30,7 +30,7 @@
 <noscript><p style="color:#ffd99a;font:16px Georgia;text-align:center;margin-top:40vh">Lanternfall needs JavaScript to run.</p></noscript>
 <script>
 /* =====================================================================
-   LANTERNFALL v1.0.0 (Polish 5, ship candidate)
+   LANTERNFALL v1.0.1 (Polish 6: keyboard hardening)
    Single-file HTML5 canvas game. No external assets. Vanilla JS.
 
    ARCHITECTURE
@@ -122,7 +122,7 @@
    audio output, human playtest of the mini-bosses and the King change.
    ===================================================================== */
 'use strict';
-const VERSION = '1.0.0'; /* ship version: shown on the title screen footer and in the page title */
+const VERSION = '1.0.1'; /* ship version: shown on the title screen footer and in the page title */
 
 // ---------------------------------------------------------------- CONFIG
 const CONFIG = {
@@ -189,9 +189,9 @@ function weightedPick(weights) {
 
 // ---------------------------------------------------------------- SETTINGS
 const Settings = {
-  scheme: 'A', shake: true, sound: true, master: 0.8, music: 0.7, sfx: 0.9, reduceFlash: false, touchScale: 1, aimAssist: true, vibrate: true, cbSafe: false, bigText: false, autoFire: true, stickFixed: false, moveFeel: 'snappy',
-  KEYS: ['scheme', 'shake', 'sound', 'master', 'music', 'sfx', 'reduceFlash', 'touchScale', 'aimAssist', 'vibrate', 'cbSafe', 'bigText', 'autoFire', 'stickFixed', 'moveFeel'],
-  load() { try { const s = JSON.parse(localStorage.getItem('lanternfall.settings') || '{}'); for (const k of this.KEYS) if (s[k] !== undefined && typeof s[k] === typeof this[k]) this[k] = s[k]; } catch (e) { /* storage blocked */ } },
+  scheme: 'B', keysV: 2, shake: true, sound: true, master: 0.8, music: 0.7, sfx: 0.9, reduceFlash: false, touchScale: 1, aimAssist: true, vibrate: true, cbSafe: false, bigText: false, autoFire: true, stickFixed: false, moveFeel: 'snappy',
+  KEYS: ['scheme', 'keysV', 'shake', 'sound', 'master', 'music', 'sfx', 'reduceFlash', 'touchScale', 'aimAssist', 'vibrate', 'cbSafe', 'bigText', 'autoFire', 'stickFixed', 'moveFeel'],
+  load() { try { const s = JSON.parse(localStorage.getItem('lanternfall.settings') || '{}'); for (const k of this.KEYS) if (s[k] !== undefined && typeof s[k] === typeof this[k]) this[k] = s[k]; if (s.keysV !== 2) { this.scheme = 'B'; this.keysV = 2; } /* v1.0.1: WASD or arrows move, mouse aims, is the new default; older saves move over to it once */ } catch (e) { /* storage blocked */ } },
   save() { try { const o = {}; for (const k of this.KEYS) o[k] = this[k]; localStorage.setItem('lanternfall.settings', JSON.stringify(o)); } catch (e) { /* ignore */ } },
 };
 Settings.load();
@@ -228,16 +228,17 @@ resize();
 const Input = {
   down: new Set(), pressed: new Set(),
   mouse: { x: 0, y: 0, down: false, moved: false },
-  norm(e) { return e.key.length === 1 ? e.key.toLowerCase() : e.key; },
+  norm(e) { /* v1.0.1: a keydown with no .key (extensions, autofill, some IMEs) used to throw here and raise the crash card; fall back to the physical key */
+    const k = (e && typeof e.key === 'string' && e.key) ? e.key : (e && typeof e.code === 'string' && /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : (e && typeof e.code === 'string' && /^Digit[0-9]$/.test(e.code) ? e.code.slice(5) : ''));
+    return k.length === 1 ? k.toLowerCase() : k; },
   init() {
     window.addEventListener('keydown', e => {
-      const k = this.norm(e), c = e.code ? '#' + e.code : ''; /* '#KeyW' etc: physical keys, so WASD also works on AZERTY / other layouts */
-      if (!this.down.has(k)) this.pressed.add(k);
-      this.down.add(k); if (c) this.down.add(c);
+      const k = this.norm(e), c = (typeof e.code === 'string' && e.code) ? '#' + e.code : ''; if (!k && !c) return; /* '#KeyW' etc: physical keys, so WASD also works on AZERTY / other layouts */
+      if (k) { if (!this.down.has(k)) this.pressed.add(k); this.down.add(k); } if (c) this.down.add(c);
       if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) e.preventDefault();
       Sfx.unlock();
     });
-    window.addEventListener('keyup', e => { this.down.delete(this.norm(e)); if (e.code) this.down.delete('#' + e.code); });
+    window.addEventListener('keyup', e => { const k = this.norm(e); if (k) this.down.delete(k); if (typeof e.code === 'string' && e.code) this.down.delete('#' + e.code); });
     const lost = () => { this.down.clear(); this.mouse.down = false; if (typeof TouchPad !== 'undefined') TouchPad.reset(); if (Game.state === 'play') Game.openMenu(); };
     window.addEventListener('blur', lost);
     document.addEventListener('visibilitychange', () => { if (document.hidden) lost(); }); /* phones: app switch / lock screen pauses too */
@@ -845,6 +846,7 @@ class Entity {
 }
 function drawShadow(c, sx, sy, r) { c.fillStyle = 'rgba(0,0,0,0.35)'; c.beginPath(); c.ellipse(sx, sy + r * 0.7, r * 1.05, r * 0.45, 0, 0, TAU); c.fill(); }
 
+const ARROW_HINT = { shown: false }; /* v1.0.1: one hint per page load */
 class Player extends Entity {
   constructor(x, y) {
     super(x, y, CONFIG.player.radius);
@@ -880,13 +882,15 @@ class Player extends Entity {
     if (Input.isDown('d', '#KeyD') || (B && Input.isDown('ArrowRight'))) mx += 1;
     if (Input.isDown('w', '#KeyW') || (B && Input.isDown('ArrowUp'))) my -= 1;
     if (Input.isDown('s', '#KeyS') || (B && Input.isDown('ArrowDown'))) my += 1;
+    const kbMove = !!(mx || my); /* v1.0.1: held movement keys win over a gamepad stick, so a drifting or stuck pad cannot lock out the keyboard */
     let ax = 0, ay = 0;
     if (B) { if (Input.isDown('j')) ax -= 1; if (Input.isDown('l')) ax += 1; if (Input.isDown('i')) ay -= 1; if (Input.isDown('k')) ay += 1; }
     else { if (Input.isDown('ArrowLeft')) ax -= 1; if (Input.isDown('ArrowRight')) ax += 1; if (Input.isDown('ArrowUp')) ay -= 1; if (Input.isDown('ArrowDown')) ay += 1; }
     if (TouchPad.move.active && (TouchPad.move.x || TouchPad.move.y)) { mx = TouchPad.move.x; my = TouchPad.move.y; }
-    if (Pad.on && (Pad.mx || Pad.my)) { mx = Pad.mx; my = Pad.my; } // Polish 3: gamepad left stick
+    if (Pad.on && (Pad.mx || Pad.my) && !kbMove) { mx = Pad.mx; my = Pad.my; } // Polish 3: gamepad left stick
     let ml = len(mx, my); if (ml > 1) { mx /= ml; my /= ml; ml = 1; }
     let firing = false, autoAim = false;
+    if (!B && (ax || ay) && !kbMove && !ARROW_HINT.shown && !TouchPad.enabled) { ARROW_HINT.shown = true; Toast.push('Arrow keys shoot', 'Move with W A S D, or pick Controls B in Settings', '#ffcf9a', 'codex'); } /* v1.0.1: arrows aim and fire in scheme A, which can feel like the keyboard is broken */
     if (ax || ay) { this.aim = Math.atan2(ay, ax); firing = true; }
     else if (Pad.on && (Pad.aimMag > 0.3 || Pad.fire)) { if (Pad.aimMag > 0.3) this.aim = Math.atan2(Pad.ay, Pad.ax); firing = Pad.fire; Input.mouse.moved = false; } // right stick aims, trigger fires
     else if (TouchPad.aim.active) { if (TouchPad.aim.mag > 0.22) { this.aim = Math.atan2(TouchPad.aim.y, TouchPad.aim.x); firing = true; } }
@@ -2599,7 +2603,7 @@ function drawTitle() {
   ctx.fillStyle = '#ffe08a'; ctx.beginPath(); ctx.arc(cx, cy, 9 + Math.sin(t * 7), 0, TAU); ctx.fill();
   drawCenterText('LANTERNFALL', 'Your lantern is your life, your sight, and your weapon.', (TouchPad.enabled ? 'Tap anywhere to descend' : 'Click or press Enter to descend') + ' · six floors · six named fights · ' + RELICS.length + ' relics');
   ctx.font = '13px Georgia'; ctx.fillStyle = '#8f86a6'; ctx.textAlign = 'center';
-  ctx.fillText(TouchPad.enabled ? 'Left thumb moves · right thumb aims & fires · DASH button · goes fullscreen on start' : 'Controls scheme ' + Settings.scheme + ' (change in the pause menu: P)', UW / 2, UH - 40);
+  ctx.fillText(TouchPad.enabled ? 'Left thumb moves · right thumb aims & fires · DASH button · goes fullscreen on start' : (Settings.scheme === 'B' ? 'WASD or arrows move · mouse aims, click fires · Space dash · P pause' : 'WASD move · arrows or mouse fire · Space dash · P pause'), UW / 2, UH - 40);
   // bestiary strip
   ctx.font = '12px Georgia';
   const names = Object.values(ENEMY_TYPES);
@@ -3319,7 +3323,7 @@ function drawHowTo() {
     keycap(c, 60, 30, 34, 34, 'W'); keycap(c, 22, 68, 34, 34, 'A'); keycap(c, 60, 68, 34, 34, 'S'); keycap(c, 98, 68, 34, 34, 'D'); label('Move', 77, 122);
     keycap(c, 196, 30, 34, 34, '↑', true); keycap(c, 158, 68, 34, 34, '←', true); keycap(c, 196, 68, 34, 34, '↓', true); keycap(c, 234, 68, 34, 34, '→', true);
     c.fillStyle = '#3b3350'; c.beginPath(); c.ellipse(310, 70, 22, 32, 0, 0, TAU); c.fill(); c.strokeStyle = '#ffcf70'; c.lineWidth = 2; c.beginPath(); c.moveTo(310, 40); c.lineTo(310, 66); c.stroke(); c.fillStyle = '#ffcf70'; c.fillRect(290, 42, 19, 22);
-    label('Aim & fire: arrows, or mouse + hold click', 236, 122, '#ffe08a');
+    label(Settings.scheme === 'B' ? 'Arrows move too · mouse + click fires' : 'Aim & fire: arrows, or mouse + hold click', 236, 122, '#ffe08a');
     keycap(c, 400, 68, 150, 34, 'SPACE / SHIFT'); label('Dash (or right-click): brief invulnerability', 475, 122, '#bfe8ff');
     keycap(c, 400, 22, 40, 34, 'E'); label('Buy', 420, 14); keycap(c, 460, 22, 40, 34, 'P'); label('Pause', 480, 14); keycap(c, 510, 22, 40, 34, 'T'); label('Test x2', 530, 14);
   } else {
@@ -4544,7 +4548,12 @@ drawTitleScreen = function () {
   });
   c.globalAlpha = clamp((t - 1.4) / 0.6, 0, 1); c.font = '12px Georgia'; c.fillStyle = '#8f86a6'; c.textAlign = 'center';
   const D = Meta.data; { /* Polish 5: ship footer; drops the least important parts until it fits narrow phones */ const parts = [`v${VERSION}`, 'six floors', 'six named fights', `${RELICS.length} relics`, `${FEATS.length} achievements`].concat(D.runs ? [`ash ${D.ash}`, `best floor ${D.bestFloor}`] : []), drop = [4, 3, 2]; let s = parts.join(' · '); for (const i of drop) { if (c.measureText(s).width <= UW - 16) break; parts[i] = null; s = parts.filter(Boolean).join(' · '); } c.fillText(s, UW / 2, UH - 12); }
-  c.fillText(touch ? 'Tap a choice' : '↑/↓ + Enter, or click', UW / 2, UH - 27); c.globalAlpha = 1;
+  c.fillText(touch ? 'Tap a choice' : '↑/↓ + Enter, or click', UW / 2, UH - 27);
+  if (!touch) { /* v1.0.1: in-game keys on the title screen, so nobody has to guess */ const MR = Game.menuRects || [], last = MR[MR.length - 1], kb = Settings.scheme === 'B';
+    let kh = kb ? 'In game: WASD or arrows move · mouse aims, click fires · Space dash · P pause' : 'In game: WASD move · arrows or mouse fire · Space dash · P pause';
+    if (c.measureText(kh).width > UW - 16) kh = kb ? 'WASD or arrows move · click fires · Space dash' : 'WASD move · arrows fire · Space dash';
+    if (!last || last.y + last.h < UH - 56) { c.fillStyle = '#c9bde3'; c.fillText(kh, UW / 2, UH - 44); } }
+  c.globalAlpha = 1;
 };
 
 // ---------------------------------------------------------------- SCREENS: Codex, Achievements, Daily Descent
@@ -4769,13 +4778,15 @@ const Haptics = {
 
 // ---------------------------------------------------------------- GAMEPAD (standard mapping): sticks, RT fire, A dash, X interact, Start pause; menus by D-pad/stick + A/B
 const Pad = {
-  on: false, mx: 0, my: 0, ax: 0, ay: 0, aimMag: 0, fire: false, prev: [], name: '', repeatT: 0, lastDir: '', lastUse: -1e9,
+  on: false, mx: 0, my: 0, ax: 0, ay: 0, aimMag: 0, fire: false, prev: [], name: '', restId: '', rest: [], repeatT: 0, lastDir: '', lastUse: -1e9,
   gp() { try { const L = navigator.getGamepads ? navigator.getGamepads() : []; for (const g of Array.from(L || [])) if (g && g.connected !== false) return g; } catch (e) { /* blocked */ } return null; },
   dz(x, y, z) { const m = Math.hypot(x, y); if (m < z) return [0, 0, 0]; const s = Math.min(1, (m - z) / (1 - z)); return [x / m * s, y / m * s, s]; }, // radial dead zone, rescaled
   poll(dt) {
-    const g = this.gp(); if (!g) { if (this.on || this.name) { this.on = false; this.name = ''; this.mx = this.my = this.ax = this.ay = this.aimMag = 0; this.fire = false; } return; }
+    const g = this.gp(); if (!g) { this.restId = ''; if (this.on || this.name) { this.on = false; this.name = ''; this.mx = this.my = this.ax = this.ay = this.aimMag = 0; this.fire = false; } return; }
     if (!this.name) { this.name = g.id || 'gamepad'; Toast.push('Gamepad connected', 'Left stick move · right stick aim · RT fire · A or LB dash · Start pause', '#9fd8ff', 'codex'); }
-    const ax = i => +((g.axes && g.axes[i]) || 0), btn = i => g.buttons && g.buttons[i], down = i => { const b = btn(i); return !!b && (typeof b === 'object' ? !!(b.pressed || b.value > 0.5) : b > 0.5); }, val = i => { const b = btn(i); return !b ? 0 : typeof b === 'object' ? (b.value || (b.pressed ? 1 : 0)) : +b; };
+    const raw = i => +((g.axes && g.axes[i]) || 0);
+    if (this.restId !== g.id) { this.restId = g.id; this.rest = []; for (let i = 0; i < 4; i++) { const v = raw(i); this.rest[i] = Math.abs(v) > 0.5 ? v : null; } } /* v1.0.1: an axis already pegged when the pad first shows up (some HID devices rest at -1) is ignored until it moves, so it cannot steer or spin menus */
+    const ax = i => { const v = raw(i), r = this.rest[i]; if (r === null || r === undefined) return v; if (Math.abs(v - r) > 0.3) { this.rest[i] = null; return v; } return 0; }, btn = i => g.buttons && g.buttons[i], down = i => { const b = btn(i); return !!b && (typeof b === 'object' ? !!(b.pressed || b.value > 0.5) : b > 0.5); }, val = i => { const b = btn(i); return !b ? 0 : typeof b === 'object' ? (b.value || (b.pressed ? 1 : 0)) : +b; };
     const [mx, my] = this.dz(ax(0), ax(1), 0.2), [rx, ry, rm] = this.dz(ax(2), ax(3), 0.25);
     const cur = []; for (let i = 0; i < 17; i++) cur[i] = down(i); const prev = this.prev, edge = i => cur[i] && !prev[i]; this.prev = cur; /* edges compare against LAST poll's buttons */
     if (mx || my || rm || cur.some(Boolean)) { this.on = true; this.lastUse = performance.now(); if (TouchPad.enabled && !TouchPad.sticks.length) { /* keep touch UI */ } }
