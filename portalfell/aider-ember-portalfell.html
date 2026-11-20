@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Portalfell</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;overflow:hidden;background:#05060a;font-family:system-ui,Arial,sans-serif;color:#fff}
+#c{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
+.hud{position:absolute;top:10px;left:10px;right:10px;display:flex;justify-content:space-between;pointer-events:none;font-weight:800;text-shadow:0 2px 6px #000;z-index:5}
+.hud div{background:rgba(0,0,0,.45);padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.25)}
+#bar{width:140px;height:10px;background:#333;border-radius:5px;overflow:hidden;margin-top:4px}#hpFill{height:100%;background:#ff4757;width:100%}
+#overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 40%,#1b2a4a,#05060a 75%);z-index:10;text-align:center;padding:20px}
+h1{font-size:clamp(38px,9vw,84px);letter-spacing:4px;color:#7df9ff;text-shadow:0 0 24px #0ff,0 4px 0 #123}h2{color:#ffb84d;margin:6px 0 14px}
+button{pointer-events:auto;background:linear-gradient(#2ee6ff,#0a7cff);border:0;color:#001;padding:14px 30px;margin:8px;font-size:20px;font-weight:900;border-radius:12px;cursor:pointer;box-shadow:0 6px 20px #0af8}
+button:active{transform:scale(.96)}#mute{position:absolute;top:64px;right:10px;z-index:6;padding:8px 12px;font-size:16px}
+#msg{position:absolute;left:50%;top:58%;transform:translate(-50%,-50%);font-size:clamp(22px,5vw,44px);font-weight:900;text-shadow:0 3px 10px #000;z-index:5;pointer-events:none;text-align:center}
+#stick{position:absolute;left:18px;bottom:18px;width:110px;height:110px;border-radius:50%;background:rgba(255,255,255,.12);border:2px solid rgba(255,255,255,.35);z-index:6;display:none}
+#nub{position:absolute;left:35px;top:35px;width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,.5)}
+#fire{position:absolute;right:22px;bottom:28px;width:84px;height:84px;border-radius:50%;z-index:6;display:none;font-size:16px}
+#cross{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);font-size:22px;z-index:4;pointer-events:none;text-shadow:0 0 4px #000}
+.small{max-width:620px;opacity:.85;line-height:1.4}
+</style></head><body>
+<canvas id="c"></canvas>
+<div class="hud"><div>❤️ HEALTH<div id="bar"><div id="hpFill"></div></div><span id="hp">100</span></div><div>WAVE <span id="wave">1</span>/3 &nbsp; ENEMIES <span id="foes">0</span></div><div>🔫 AMMO <span id="ammo">50</span><br><span style="font-size:12px">PORTAL <span id="portal">NO</span></span></div></div>
+<button id="mute">🔊 MUSIC</button><div id="cross">+</div><div id="msg"></div>
+<div id="stick"><div id="nub"></div></div><button id="fire">FIRE</button>
+<div id="overlay"><h1>PORTALFELL</h1><h2>One room. Two portals. Three waves.</h2>
+<p class="small">WASD + Mouse Look &nbsp;•&nbsp; Click to Fire &nbsp;•&nbsp; Walk into a portal to exit the opposite wall — momentum kept.<br>Phone: left stick moves, drag right side to look, FIRE button shoots.</p>
+<div><button id="start">▶ START</button><button id="demo">🤖 DEMO MODE</button></div>
+<p class="small">CREDITS: All art, textures, sprites &amp; music generated procedurally in code (WebAudio chiptune loop + Canvas textures) — no external assets, public domain / original, license: free to use. No external libraries.</p></div>
+<script>
+"use strict";
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');let W,H;function rs(){W=cv.width=innerWidth;H=cv.height=innerHeight}addEventListener('resize',rs);rs();
+const MAP=16;let grid=[];function buildMap(){grid=[];for(let y=0;y<MAP;y++){grid[y]=[];for(let x=0;x<MAP;x++){let v=(x==0||y==0||x==MAP-1||y==MAP-1)?1:0;if((x==4&&y==4)||(x==11&&y==4)||(x==4&&y==11)||(x==11&&y==11)||(x==7&&y==7)||(x==8&&y==7))v=2;grid[y][x]=v}}}
+buildMap();
+function solid(x,y){let gx=Math.floor(x),gy=Math.floor(y);if(gx<0||gy<0||gx>=MAP||gy>=MAP)return 1;return grid[gy][gx]>0}
+function los(x1,y1,x2,y2){let d=Math.hypot(x2-x1,y2-y1),n=Math.ceil(d*4);for(let i=1;i<n;i++){if(solid(x1+(x2-x1)*i/n,y1+(y2-y1)*i/n))return false}return true}
+// BFS next-step helper: the room has solid pillars at (7,7)/(8,7) etc. that block
+// any straight north-south line through the centre (x=7..9), so steering straight
+// at a target/portal gets the bot (and, with the old LOS-gated movement, enemies)
+// permanently stuck on a pillar. BFS on the 16x16 grid routes around them.
+function bfsNext(sx,sy,tx,ty){
+  let s={x:Math.floor(sx),y:Math.floor(sy)},t={x:Math.floor(tx),y:Math.floor(ty)};
+  if(s.x==t.x&&s.y==t.y)return null;
+  if(t.x<0||t.y<0||t.x>=MAP||t.y>=MAP||grid[t.y][t.x]>0)return null;
+  let prev=new Map(),q=[s];prev.set(s.y*MAP+s.x,-1);
+  while(q.length){
+    let c=q.shift();
+    if(c.x==t.x&&c.y==t.y){
+      let cur=c,last=null;
+      while(cur&&prev.get(cur.y*MAP+cur.x)!=-1){last=cur;let p=prev.get(cur.y*MAP+cur.x);cur=p<0?null:{x:p%MAP,y:Math.floor(p/MAP)}}
+      return last?{x:last.x+.5,y:last.y+.5}:null;
+    }
+    for(let d of [[1,0],[-1,0],[0,1],[0,-1]]){
+      let nx=c.x+d[0],ny=c.y+d[1],k=ny*MAP+nx;
+      if(nx<0||ny<0||nx>=MAP||ny>=MAP||grid[ny][nx]>0||prev.has(k))continue;
+      prev.set(k,c.y*MAP+c.x);q.push({x:nx,y:ny});
+    }
+  }
+  return null;
+}
+function angDiff(a,b){return ((a-b+Math.PI*3)%(Math.PI*2))-Math.PI}
+// textures generated
+function makeTex(base,detail){let c=document.createElement('canvas');c.width=c.height=64;let g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,64,64);for(let i=0;i<400;i++){g.fillStyle=detail;g.globalAlpha=Math.random()*.5;g.fillRect(Math.random()*64,Math.random()*64,3,3)}g.globalAlpha=1;g.strokeStyle='rgba(0,0,0,.5)';g.strokeRect(1,1,62,62);return c}
+const texWall=makeTex('#3a4a6b','#7df9ff'),texPillar=makeTex('#6b4a2a','#ffb84d');
+let P,E,Pick,keys={},running=false,demo=false,portalUsed=false,shake=0,muzzle=0,last=0,fireCd=0,botT=0,botPortalT=0,portalMode=0,portalTimer=0,spawnQueue=[],wave=1,state='title';
+function reset(){P={x:8,y:13,a:-Math.PI/2,hp:100,ammo:60,alive:true};E=[];Pick=[{x:2.5,y:2.5,t:'h'},{x:13.5,y:2.5,t:'a'},{x:2.5,y:13.5,t:'a'},{x:13.5,y:13.5,t:'h'},{x:8,y:8,t:'h'}];wave=1;portalUsed=false;portalMode=0;botPortalT=0;startWave(1);updateHUD()}
+function startWave(w){wave=w;let n=[3,5,7][w-1];spawnQueue=[];let spots=[[2,2],[13,2],[2,13],[13,13],[8,2],[2,8],[13,8]];for(let i=0;i<n;i++){let s=spots[i%spots.length];spawnQueue.push({x:s[0]+.5,y:s[1]+.5,hp:50+w*20,sp:1.3+w*.25,cd:0})}msg('WAVE '+w);setTimeout(()=>msg(''),1400)}
+function msg(t){document.getElementById('msg').textContent=t}
+function updateHUD(){document.getElementById('hp').textContent=Math.max(0,Math.ceil(P.hp));document.getElementById('hpFill').style.width=Math.max(0,P.hp)+'%';document.getElementById('ammo').textContent=P.ammo;document.getElementById('wave').textContent=wave;document.getElementById('foes').textContent=E.length+spawnQueue.length;document.getElementById('portal').textContent=portalUsed?'YES ✓':'NO'}
+function end(win){running=false;state=win?'win':'over';document.exitPointerLock&&document.exitPointerLock();let o=document.getElementById('overlay');o.style.display='flex';o.innerHTML=`<h1>${win?'YOU WIN!':'GAME OVER'}</h1><h2>${win?'All 3 waves cleared. Portal used: '+(portalUsed?'YES':'NO'):'The room claims another.'}</h2><p class="small">Health ${Math.ceil(P.hp)} • Ammo ${P.ammo} • Portal used: ${portalUsed?'YES ✓':'NO'}</p><div><button onclick="location.reload()">↻ RESTART</button></div>`}
+// audio music
+let AC=null,musicOn=true,musicTimer=null,step=0;function initAudio(){if(AC)return;AC=new (window.AudioContext||window.webkitAudioContext)();let bass=[55,55,65.4,49,55,55,82.4,73.4];musicTimer=setInterval(()=>{if(!musicOn||!running)return;let t=AC.currentTime;let f=bass[step%8];let o=AC.createOscillator(),g=AC.createGain();o.type='sawtooth';o.frequency.value=f;g.gain.setValueAtTime(.06,t);g.gain.exponentialRampToValueAtTime(.001,t+.22);o.connect(g).connect(AC.destination);o.start(t);o.stop(t+.25);if(step%2==0){let o2=AC.createOscillator(),g2=AC.createGain();o2.type='square';o2.frequency.value=f*4*(1+((step/2)%4)*.25);g2.gain.setValueAtTime(.02,t);g2.gain.exponentialRampToValueAtTime(.001,t+.12);o2.connect(g2).connect(AC.destination);o2.start(t);o2.stop(t+.13)}step++},180)}
+document.getElementById('mute').onclick=e=>{musicOn=!musicOn;e.target.textContent=musicOn?'🔊 MUSIC':'🔇 MUTED';if(AC)musicOn?AC.resume():AC.suspend()};
+function shoot(){if(!running||fireCd>0||P.ammo<=0)return;fireCd=.16;P.ammo--;muzzle=1;if(AC){let o=AC.createOscillator(),g=AC.createGain();o.type='square';o.frequency.value=180;g.gain.setValueAtTime(.08,AC.currentTime);g.gain.exponentialRampToValueAtTime(.001,AC.currentTime+.08);o.connect(g).connect(AC.destination);o.start();o.stop(AC.currentTime+.09)}
+ let best=null,bd=1e9;for(let e of E){let dx=e.x-P.x,dy=e.y-P.y,d=Math.hypot(dx,dy);let ang=Math.atan2(dy,dx);let diff=Math.abs(angDiff(ang,P.a));if(diff<.12&&d<bd&&los(P.x,P.y,e.x,e.y)){bd=d;best=e}}if(best){best.hp-=34;best.x+=Math.cos(P.a)*.15;best.y+=Math.sin(P.a)*.15;if(best.hp<=0){E.splice(E.indexOf(best),1);if(Math.random()<.3)Pick.push({x:best.x,y:best.y,t:Math.random()<.5?'h':'a'})}}updateHUD()}
+function movePlayer(mx,my,dt){let sp=3.4;let dx=(Math.cos(P.a)*my-Math.sin(P.a)*mx)*sp*dt,dy=(Math.sin(P.a)*my+Math.cos(P.a)*mx)*sp*dt;let ox=P.x,oy=P.y;
+ if(!solid(P.x+dx+ (dx>0?.2:-.2),P.y))P.x+=dx; if(!solid(P.x,P.y+dy+(dy>0?.2:-.2)))P.y+=dy;
+ // portal crossing planes y=1 (north wall inner face) and y=15 (south)
+ if(oy>1&&P.y<=1&&P.x>7&&P.x<9){P.y=14.6;P.a+=Math.PI;portalUsed=true;msg('PORTAL!');setTimeout(()=>msg(''),600)}
+ else if(oy<15&&P.y>=15&&P.x>7&&P.x<9){P.y=1.4;P.a+=Math.PI;portalUsed=true;msg('PORTAL!');setTimeout(()=>msg(''),600)}
+ // pickups
+ for(let i=Pick.length-1;i>=0;i--){let p=Pick[i];if(Math.hypot(p.x-P.x,p.y-P.y)<.6){if(p.t=='h')P.hp=Math.min(100,P.hp+30);else P.ammo+=20;Pick.splice(i,1);updateHUD()}}}
+function turnTo(ang,rate,dt){let d=angDiff(ang,P.a);P.a+=d*Math.min(1,dt*rate);return Math.abs(d)}
+function followWp(wp,dt){if(!wp)return;turnTo(Math.atan2(wp.y-P.y,wp.x-P.x),8,dt);movePlayer(0,1,dt)}
+function bot(dt){botT+=dt;botPortalT+=dt;
+ let target=null,td=1e9;for(let e of E){let d=Math.hypot(e.x-P.x,e.y-P.y);if(d<td){td=d;target=e}}
+ // Portal excursion, routed with BFS around the centre pillars (a straight
+ // line to x=8 is blocked by the solid cells at (7,7)/(8,7), so the old bot
+ // never actually reached a portal). Only when safe, and aborted on danger.
+ if(portalMode==0&&botPortalT>10&&P.hp>50&&(!target||td>4)){portalMode=P.y<8?1:2;portalTimer=0}
+ if(portalMode!=0){
+   portalTimer+=dt;
+   if(portalTimer>7||P.hp<30||(target&&td<2.5)){portalMode=0;botPortalT=0}
+   else{
+     let ty=portalMode==1?1:14;
+     let wp=bfsNext(P.x,P.y,8,ty);
+     if(wp)followWp(wp,dt);
+     else{turnTo(portalMode==1?-Math.PI/2:Math.PI/2,10,dt);movePlayer(0,1,dt);
+       if((portalMode==1&&P.y>12)||(portalMode==2&&P.y<3)){portalMode=0;botPortalT=0}}
+     return;
+   }
+ }
+ // Get health / ammo before fighting when needed (old bot ignored ammo and
+ // shot through walls, wasting its 60 rounds and soft-locking wave 3).
+ let need=null;
+ if(P.hp<45)need=Pick.filter(p=>p.t=='h').sort((a,b)=>Math.hypot(a.x-P.x,a.y-P.y)-Math.hypot(b.x-P.x,b.y-P.y))[0];
+ if(!need&&P.ammo<12)need=Pick.filter(p=>p.t=='a').sort((a,b)=>Math.hypot(a.x-P.x,a.y-P.y)-Math.hypot(b.x-P.x,b.y-P.y))[0];
+ if(need&&(!target||td>3)){followWp(bfsNext(P.x,P.y,need.x,need.y),dt);return}
+ if(!target){followWp(bfsNext(P.x,P.y,8,8),dt);return}
+ let ang=Math.atan2(target.y-P.y,target.x-P.x);
+ let seen=los(P.x,P.y,target.x,target.y);
+ if(!seen||td>7){ // close the distance / get a line of sight via BFS
+   let wp=bfsNext(P.x,P.y,target.x,target.y);
+   if(wp)followWp(wp,dt);else{turnTo(ang,10,dt);movePlayer(0,1,dt)}
+   return;
+ }
+ // In range with LOS: face target, keep ~5m distance, strafe, and only fire
+ // when actually aligned AND with LOS (shoot() itself requires LOS to hit,
+ // so firing otherwise just burns ammo).
+ turnTo(ang,12,dt);
+ let strafe=Math.sin(botT*2.5);
+ let fwd=td>6?0.6:(td<3?-0.6:0);
+ movePlayer(strafe*0.8,fwd,dt);
+ if(Math.abs(angDiff(ang,P.a))<.1&&seen)shoot()}
+function update(dt){if(!running)return;fireCd-=dt;muzzle=Math.max(0,muzzle-dt*6);
+ if(spawnQueue.length&&E.length<6){let s=spawnQueue.shift();E.push({...s,hit:0})}
+ if(demo)bot(dt);else{let mx=0,my=0;if(keys['KeyW']||keys['ArrowUp'])my+=1;if(keys['KeyS']||keys['ArrowDown'])my-=1;if(keys['KeyA'])mx-=1;if(keys['KeyD'])mx+=1;if(touch.mx||touch.my){mx+=touch.mx;my+=-touch.my}movePlayer(mx,my,dt)}
+ for(let e of E){let dx=P.x-e.x,dy=P.y-e.y,d=Math.hypot(dx,dy);
+  if(d>1.0){
+    let mx=dx/d,my=dy/d;
+    // Old code only moved enemies with LOS, so enemies behind a pillar froze
+    // forever. Without LOS, route around pillars with BFS.
+    if(!los(e.x,e.y,P.x,P.y)){let wp=bfsNext(e.x,e.y,P.x,P.y);if(wp){let dd=Math.hypot(wp.x-e.x,wp.y-e.y)||1;mx=(wp.x-e.x)/dd;my=(wp.y-e.y)/dd}}
+    let nx=e.x+mx*e.sp*dt,ny=e.y+my*e.sp*dt;if(!solid(nx,e.y))e.x=nx;if(!solid(e.x,ny))e.y=ny}
+  e.cd-=dt;if(d<1.3&&e.cd<=0){e.cd=.8;P.hp-=9;shake=1;updateHUD();if(P.hp<=0){P.hp=0;end(false)}}}
+ if(E.length==0&&spawnQueue.length==0){if(wave<3)startWave(wave+1);else end(true)}
+ updateHUD()}
+function cast(a){let dx=Math.cos(a),dy=Math.sin(a);let x=P.x,y=P.y;for(let i=0;i<64;i+=.05){x+=dx*.05;y+=dy*.05;let gx=Math.floor(x),gy=Math.floor(y);if(gx<0||gy<0||gx>=MAP||gy>=MAP||grid[gy][gx]>0){let isPortal=((gy==0||gy==MAP-1)&&x>7&&x<9);return{d:i,wall:grid[gy][gx],portal:isPortal,x,y}}}return{d:64,wall:1}}
+function draw(){let sky=ctx.createLinearGradient(0,0,0,H/2);sky.addColorStop(0,'#0a1030');sky.addColorStop(1,'#3a2a6a');ctx.fillStyle=sky;ctx.fillRect(0,0,W,H/2);let fl=ctx.createLinearGradient(0,H/2,0,H);fl.addColorStop(0,'#1a1a22');fl.addColorStop(1,'#050505');ctx.fillStyle=fl;ctx.fillRect(0,H/2,W,H/2);
+ let fov=Math.PI/3,cols=Math.floor(W/3);
+ for(let i=0;i<cols;i++){let cam=(i/cols-.5)*2;let a=P.a+Math.atan(cam*Math.tan(fov/2));let r=cast(a);let d=r.d*Math.cos(a-P.a);let h=H/(d+.001);let x=i*3;let tex=r.wall==2?texPillar:texWall;
+  if(r.portal){let g=ctx.createLinearGradient(0,H/2-h/2,0,H/2+h/2);g.addColorStop(0,'#0ff');g.addColorStop(.5,'#a0f');g.addColorStop(1,'#0ff');ctx.fillStyle=g;ctx.fillRect(x,H/2-h/2,3,h)}
+  else{ctx.drawImage(tex,Math.floor(((r.x+r.y)%1)*64),0,1,64,x,H/2-h/2,3,h);ctx.fillStyle=`rgba(0,0,0,${Math.min(.7,d/14)})`;ctx.fillRect(x,H/2-h/2,3,h)}}
+ // sprites
+ let spr=[...E.map(e=>({x:e.x,y:e.y,k:'e',e})),...Pick.map(p=>({x:p.x,y:p.y,k:'p',p}))];
+ spr.forEach(s=>{s.d=Math.hypot(s.x-P.x,s.y-P.y);s.ang=Math.atan2(s.y-P.y,s.x-P.x)});spr.sort((a,b)=>b.d-a.d);
+ for(let s of spr){let diff=angDiff(s.ang,P.a);if(Math.abs(diff)>fov)continue;let sx=W/2+Math.tan(diff)/Math.tan(fov/2)*W/2;let size=H/(s.d+.001)*(s.k=='e'?0.9:0.4);let sy=H/2-size/2+(s.k=='p'?size*.6:0);
+  if(s.k=='e'){ctx.fillStyle='#c0392b';ctx.fillRect(sx-size/2,sy,size,size);ctx.fillStyle='#ff0';ctx.fillRect(sx-size/4,sy+size/4,size/8,size/8);ctx.fillRect(sx+size/8,sy+size/4,size/8,size/8);ctx.fillStyle='#000';ctx.fillRect(sx-size/2,sy-6,size,6);ctx.fillStyle='#0f0';ctx.fillRect(sx-size/2,sy-6,size*Math.max(0,s.e.hp/100),6)}
+  else{ctx.fillStyle=s.p.t=='h'?'#fff':'#ffd700';ctx.beginPath();ctx.arc(sx,sy,size/2,0,7);ctx.fill();ctx.fillStyle=s.p.t=='h'?'#f00':'#000';ctx.font=`${size/2}px Arial`;ctx.textAlign='center';ctx.fillText(s.p.t=='h'?'+':'A',sx,sy+size/6)}}
+ if(muzzle>0){ctx.fillStyle=`rgba(255,200,0,${muzzle*.7})`;ctx.beginPath();ctx.arc(W/2,H*.72,40*muzzle+10,0,7);ctx.fill()}
+ if(shake>0){ctx.fillStyle=`rgba(255,0,0,${shake*.2})`;ctx.fillRect(0,0,W,H);shake-=0.05}
+ // minimap-ish portal hint
+ ctx.fillStyle='rgba(0,255,255,.8)';ctx.font='12px Arial';ctx.textAlign='center';ctx.fillText('▲ PORTAL NORTH ▲   ▼ PORTAL SOUTH ▼',W/2,70)}
+function loop(t){requestAnimationFrame(loop);let dt=Math.min(.05,(t-last)/1000||0);last=t;if(running)update(dt);if(running||state!='title')draw();else{ctx.fillStyle='#05060a';ctx.fillRect(0,0,W,H)}}
+requestAnimationFrame(loop);
+addEventListener('keydown',e=>keys[e.code]=true);addEventListener('keyup',e=>keys[e.code]=false);
+cv.addEventListener('click',()=>{if(running&&!demo){shoot();if(!isTouch)cv.requestPointerLock()}});
+document.addEventListener('mousemove',e=>{if(document.pointerLockElement==cv&&running&&!demo)P.a+=e.movementX*.0025});
+let isTouch='ontouchstart'in window;if(isTouch){document.getElementById('stick').style.display='block';document.getElementById('fire').style.display='block'}
+let touch={mx:0,my:0,id:null,lx:0,ly:0,rid:null,rx:0};
+let stick=document.getElementById('stick'),nub=document.getElementById('nub');
+stick.addEventListener('touchstart',e=>{let t=e.touches[0];touch.id=t.identifier;touch.lx=t.clientX;touch.ly=t.clientY},{passive:false});
+addEventListener('touchmove',e=>{for(let t of e.touches){if(t.identifier==touch.id){touch.mx=Math.max(-1,Math.min(1,(t.clientX-touch.lx)/40));touch.my=Math.max(-1,Math.min(1,(t.clientY-touch.ly)/40));nub.style.left=(35+touch.mx*30)+'px';nub.style.top=(35+touch.my*30)+'px'}else if(t.identifier==touch.rid){P.a+=(t.clientX-touch.rx)*.008;touch.rx=t.clientX}}e.preventDefault()},{passive:false});
+addEventListener('touchend',e=>{for(let t of e.changedTouches){if(t.identifier==touch.id){touch.mx=touch.my=0;nub.style.left='35px';nub.style.top='35px'}if(t.identifier==touch.rid)touch.rid=null}});
+cv.addEventListener('touchstart',e=>{let t=e.touches[0];touch.rid=t.identifier;touch.rx=t.clientX},{passive:true});
+document.getElementById('fire').addEventListener('touchstart',e=>{e.preventDefault();shoot()});
+function startGame(isDemo){demo=isDemo;initAudio();AC&&AC.resume();reset();running=true;state='play';document.getElementById('overlay').style.display='none';if(!isDemo&&!isTouch)cv.requestPointerLock();msg(isDemo?'DEMO PLAYING…':'GO!');setTimeout(()=>msg(''),1200)}
+document.getElementById('start').onclick=()=>startGame(false);
+document.getElementById('demo').onclick=()=>startGame(true);
+</script></body></html>

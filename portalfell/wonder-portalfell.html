@@ -1,0 +1,1009 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PORTALFELL — one room, two portals, three waves</title>
+<!--
+CREDITS
+=======
+All graphics in this game are generated in code at runtime (procedural canvas
+textures and sprites). All music and sound effects are synthesized in code with
+the Web Audio API (chiptune). NO external assets are used: no images, no audio
+files, no fonts, no libraries. Nothing to license; everything is original code.
+-->
+<style>
+  html,body{margin:0;padding:0;background:#05060a;height:100%;overflow:hidden;
+    font-family:"Courier New",monospace;color:#dfe7ff;-webkit-user-select:none;user-select:none;
+    touch-action:none;}
+  #wrap{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#05060a;}
+  #game{image-rendering:pixelated;background:#000;box-shadow:0 0 60px #1b2a55;}
+  /* HUD */
+  #hud{position:fixed;top:0;left:0;right:0;display:none;justify-content:space-between;align-items:flex-start;
+    padding:10px 14px;pointer-events:none;z-index:5;}
+  #hud .box{background:rgba(5,8,20,.72);border:1px solid #3550a0;padding:6px 12px;border-radius:6px;
+    font-size:17px;letter-spacing:1px;text-shadow:0 0 6px #000;}
+  #hud b{color:#ffd75e;}
+  #hud .low b{color:#ff5a5a;}
+  #msg{position:fixed;top:64px;left:0;right:0;text-align:center;font-size:26px;font-weight:bold;
+    letter-spacing:3px;color:#ffd75e;text-shadow:0 0 12px #a06800,0 2px 2px #000;pointer-events:none;z-index:5;
+    opacity:0;transition:opacity .3s;}
+  #dmgflash{position:fixed;inset:0;background:radial-gradient(ellipse at center,transparent 55%,rgba(255,0,0,.55) 100%);
+    opacity:0;pointer-events:none;z-index:4;}
+  #mutebtn{position:fixed;top:64px;right:14px;z-index:6;background:rgba(5,8,20,.8);color:#dfe7ff;
+    border:1px solid #3550a0;border-radius:6px;padding:6px 10px;font-family:inherit;font-size:14px;cursor:pointer;}
+  /* Overlays */
+  .overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(3,4,12,.86);z-index:10;text-align:center;padding:20px;}
+  .overlay h1{font-size:52px;margin:0 0 4px;letter-spacing:6px;color:#7df9ff;
+    text-shadow:0 0 18px #0aa7b8,0 0 46px #7a2be0;}
+  .overlay h1 .fell{color:#ff5ad2;text-shadow:0 0 18px #b80a7d,0 0 46px #7a2be0;}
+  .overlay p{max-width:560px;line-height:1.5;color:#aebadd;font-size:15px;margin:8px 0;}
+  .overlay .big{font-size:20px;color:#ffd75e;letter-spacing:2px;}
+  .btn{background:#12235c;color:#eaf2ff;border:2px solid #4d74e0;border-radius:8px;
+    padding:13px 38px;font-family:inherit;font-size:20px;letter-spacing:2px;cursor:pointer;margin:8px 6px;
+    box-shadow:0 0 14px rgba(60,100,255,.35);}
+  .btn:hover{background:#1b34a0;}
+  .btn.demo{background:#3a1050;border-color:#a04de0;box-shadow:0 0 14px rgba(170,60,255,.35);}
+  #winov h1{color:#8dff7d;text-shadow:0 0 18px #2bb80a,0 0 46px #0a7a2b;}
+  #overov h1{color:#ff5a5a;text-shadow:0 0 18px #b80a0a,0 0 46px #7a0a2b;}
+  .hidden{display:none !important;}
+  /* Touch controls */
+  #touch{position:fixed;inset:0;z-index:6;pointer-events:none;display:none;}
+  #stick{position:absolute;width:110px;height:110px;border:2px solid rgba(160,190,255,.5);border-radius:50%;
+    background:rgba(40,60,140,.25);display:none;}
+  #stickknob{position:absolute;width:48px;height:48px;border-radius:50%;background:rgba(180,205,255,.55);
+    left:31px;top:31px;}
+  #firebtn{position:absolute;right:26px;bottom:30px;width:84px;height:84px;border-radius:50%;
+    background:rgba(200,40,60,.45);border:2px solid rgba(255,120,120,.8);color:#fff;font-family:inherit;
+    font-size:16px;pointer-events:auto;}
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="640" height="360"></canvas></div>
+
+<div id="hud">
+  <div class="box" id="hudhp">HEALTH <b>100</b></div>
+  <div class="box" id="hudwave">WAVE <b>1</b></div>
+  <div class="box" id="hudammo">AMMO <b>60</b></div>
+</div>
+<div id="msg"></div>
+<div id="dmgflash"></div>
+<button id="mutebtn">Sound: On</button>
+
+<div id="touch">
+  <div id="stick"><div id="stickknob"></div></div>
+  <button id="firebtn">FIRE</button>
+</div>
+
+<div class="overlay" id="titleov">
+  <h1>PORTAL<span class="fell">FELL</span></h1>
+  <p class="big">ONE ROOM. TWO PORTALS. THREE WAVES.</p>
+  <p>Demons are pouring into the vault. The two portals on the side walls are
+     linked — walk in one, come out the other, still moving at your speed.
+     Your shots fly through them too. Use that.</p>
+  <p>WASD / arrows to move &nbsp;·&nbsp; mouse to look &nbsp;·&nbsp; click to fire<br>
+     On a phone: left stick to move, drag to look, FIRE button to shoot.</p>
+  <div>
+    <button class="btn" id="startbtn">Start</button>
+    <button class="btn demo" id="demobtn">Demo</button>
+  </div>
+  <p style="font-size:12px;color:#6d7ba6">All art and music generated in code. No external assets.</p>
+</div>
+
+<div class="overlay hidden" id="winov">
+  <h1>YOU WIN</h1>
+  <p class="big">ALL WAVES CLEARED — THE ROOM IS YOURS</p>
+  <p id="winstats"></p>
+  <button class="btn" id="againbtn">Play Again</button>
+</div>
+
+<div class="overlay hidden" id="overov">
+  <h1>GAME OVER</h1>
+  <p class="big">THE ROOM TOOK YOU</p>
+  <p id="overstats"></p>
+  <button class="btn" id="retrybtn">Play Again</button>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   PORTALFELL — a one-room raycast shooter with linked portals.
+   Everything (textures, sprites, music, sfx) is generated here.
+   ============================================================ */
+
+// ---------- Map ----------
+// # wall, P pillar, A portal (west wall), B portal (east wall), . floor
+const MAP = [
+  "################",
+  "#..............#",
+  "#..P......P....#",
+  "#..P......P....#",
+  "#..............#",
+  "#.....PP.......#",
+  "#.....PP.......#",
+  "A..............B",
+  "#..............#",
+  "#.......PP.....#",
+  "#.......PP.....#",
+  "#..............#",
+  "#....P......P..#",
+  "#....P......P..#",
+  "#..............#",
+  "################"
+];
+const MW = 16, MH = 16;
+function tileAt(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  if (!isFinite(xi) || !isFinite(yi) || xi < 0 || yi < 0 || xi >= MW || yi >= MH) return "#";
+  return MAP[yi].charAt(xi);
+}
+function isSolid(x, y) {
+  const t = tileAt(x, y);
+  return t === "#" || t === "P";
+}
+function isPortal(x, y) {
+  const t = tileAt(x, y);
+  return t === "A" || t === "B";
+}
+// Portal definitions: tile coords, exit facing angle (direction you travel
+// when emerging INTO the room from that portal).
+const PORTALS = {
+  A: { tx: 0,  ty: 7, face: 0 },              // west wall, exit facing east
+  B: { tx: 15, ty: 7, face: Math.PI }         // east wall, exit facing west
+};
+function portalTransform(px, py, vx, vy, ang, entryKey) {
+  // Standard linked-portal transform: rotate direction/velocity by
+  // (exitFace - entryFace + PI) so motion through the pair is continuous,
+  // preserve the lateral offset along the portal face, keep speed.
+  const exitKey = entryKey === "A" ? "B" : "A";
+  const E = PORTALS[entryKey], X = PORTALS[exitKey];
+  const rot = X.face - E.face + Math.PI;
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const lateral = py - (E.ty + 0.5);            // offset along the wall (y)
+  const nx = (X.tx + 0.5) + Math.cos(X.face) * 0.62;
+  const ny = (X.ty + 0.5 + lateral) + Math.sin(X.face) * 0.62;
+  return {
+    x: nx, y: ny,
+    vx: vx * cos - vy * sin,
+    vy: vx * sin + vy * cos,
+    ang: ang + rot
+  };
+}
+
+// ---------- Canvas ----------
+const cv = document.getElementById("game");
+const ctx = cv.getContext("2d");
+const W = cv.width, H = cv.height;
+function fitCanvas() {
+  const s = Math.min(window.innerWidth / W, window.innerHeight / H);
+  cv.style.width = (W * s) + "px";
+  cv.style.height = (H * s) + "px";
+}
+window.addEventListener("resize", fitCanvas);
+fitCanvas();
+
+// ---------- Procedural textures (64x64) ----------
+function makeTex(draw) {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+  draw(c.getContext("2d"), 64);
+  return c;
+}
+function noise(g, s, base, amp, n) {
+  for (let i = 0; i < n; i++) {
+    const v = base + Math.random() * amp;
+    g.fillStyle = "rgb(" + v + "," + v + "," + (v + 8) + ")";
+    g.fillRect(Math.random() * s, Math.random() * s, 2, 2);
+  }
+}
+const TEX = {};
+TEX.wall = makeTex((g, s) => {
+  g.fillStyle = "#3d4457"; g.fillRect(0, 0, s, s);
+  g.fillStyle = "#454d63";
+  for (let r = 0; r < 4; r++) for (let cix = 0; cix < 2; cix++)
+    g.fillRect(cix * 32 + (r % 2) * 16 - 16 + 16, r * 16, 30, 14);
+  g.fillStyle = "#2b303f";
+  for (let r = 0; r <= 4; r++) g.fillRect(0, r * 16 - 1, s, 2);
+  noise(g, s, 40, 30, 260);
+  g.fillStyle = "rgba(125,249,255,0.16)"; g.fillRect(0, 30, s, 3);
+});
+TEX.pillar = makeTex((g, s) => {
+  g.fillStyle = "#565064"; g.fillRect(0, 0, s, s);
+  g.fillStyle = "#686078"; g.fillRect(6, 6, s - 12, s - 12);
+  g.fillStyle = "#403a4e"; g.fillRect(6, 6, s - 12, 4); g.fillRect(6, s - 10, s - 12, 4);
+  g.fillStyle = "#8f86a8";
+  [[10, 10], [s - 14, 10], [10, s - 14], [s - 14, s - 14]].forEach(p => {
+    g.beginPath(); g.arc(p[0] + 2, p[1] + 2, 3, 0, 7); g.fill();
+  });
+  g.fillStyle = "rgba(255,213,94,0.85)"; g.fillRect(28, 28, 8, 8);
+  noise(g, s, 60, 26, 160);
+});
+function portalTex(colA, colB) {
+  return makeTex((g, s) => {
+    g.fillStyle = "#0a0a14"; g.fillRect(0, 0, s, s);
+    for (let r = 26; r > 2; r -= 4) {
+      g.strokeStyle = (r / 4) % 2 ? colA : colB;
+      g.lineWidth = 3;
+      g.beginPath(); g.arc(s / 2, s / 2, r, 0, 7); g.stroke();
+    }
+    g.fillStyle = "#ffffff"; g.beginPath(); g.arc(s / 2, s / 2, 3, 0, 7); g.fill();
+  });
+}
+TEX.portalA = portalTex("#12e6c8", "#0a7a8c");
+TEX.portalB = portalTex("#ff5ad2", "#8c0a6a");
+
+// ---------- Procedural sprites ----------
+function makeSprite(draw) {
+  const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+  draw(c.getContext("2d"), 64);
+  return c;
+}
+function demonSprite(body, belly, eye) {
+  return makeSprite((g, s) => {
+    g.clearRect(0, 0, s, s);
+    g.fillStyle = body;
+    g.beginPath(); g.ellipse(32, 38, 20, 22, 0, 0, 7); g.fill();       // body
+    g.fillStyle = belly;
+    g.beginPath(); g.ellipse(32, 44, 12, 14, 0, 0, 7); g.fill();      // belly
+    g.fillStyle = body;                                                // horns
+    g.beginPath(); g.moveTo(16, 20); g.lineTo(8, 4); g.lineTo(24, 12); g.fill();
+    g.beginPath(); g.moveTo(48, 20); g.lineTo(56, 4); g.lineTo(40, 12); g.fill();
+    g.fillStyle = eye;                                                 // eyes
+    g.beginPath(); g.arc(25, 32, 4, 0, 7); g.fill();
+    g.beginPath(); g.arc(39, 32, 4, 0, 7); g.fill();
+    g.fillStyle = "#12060a";                                           // mouth
+    g.beginPath(); g.ellipse(32, 48, 8, 4, 0, 0, 7); g.fill();
+    g.fillStyle = "#fff";
+    g.fillRect(26, 45, 3, 4); g.fillRect(35, 45, 3, 4);                // fangs
+  });
+}
+function whiteOf(src) {  // white silhouette for hit-flash
+  const c = document.createElement("canvas"); c.width = 64; c.height = 64;
+  const g = c.getContext("2d");
+  g.drawImage(src, 0, 0);
+  g.globalCompositeOperation = "source-in";
+  g.fillStyle = "#ffffff"; g.fillRect(0, 0, 64, 64);
+  return c;
+}
+const SPR = {};
+SPR.chaser = demonSprite("#b03030", "#d06050", "#ffd75e");
+SPR.chaserHit = whiteOf(SPR.chaser);
+SPR.spitter = demonSprite("#7030b0", "#9a60d0", "#7df9ff");
+SPR.spitterHit = whiteOf(SPR.spitter);
+SPR.health = makeSprite((g, s) => {
+  g.clearRect(0, 0, s, s);
+  g.fillStyle = "#e8ecf4"; g.fillRect(10, 18, 44, 32);
+  g.strokeStyle = "#8a93a8"; g.strokeRect(10, 18, 44, 32);
+  g.fillStyle = "#d21f2e";
+  g.fillRect(27, 24, 10, 20); g.fillRect(22, 29, 20, 10);
+});
+SPR.ammo = makeSprite((g, s) => {
+  g.clearRect(0, 0, s, s);
+  g.fillStyle = "#2e5d33"; g.fillRect(12, 22, 40, 28);
+  g.fillStyle = "#47804e"; g.fillRect(12, 22, 40, 8);
+  g.fillStyle = "#ffd75e";
+  g.fillRect(20, 34, 5, 10); g.fillRect(29, 34, 5, 10); g.fillRect(38, 34, 5, 10);
+});
+SPR.orb = makeSprite((g, s) => {
+  g.clearRect(0, 0, s, s);
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 16);
+  gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.35, "#ffe27d"); gr.addColorStop(1, "rgba(255,140,0,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(32, 32, 16, 0, 7); g.fill();
+});
+SPR.eorb = makeSprite((g, s) => {
+  g.clearRect(0, 0, s, s);
+  const gr = g.createRadialGradient(32, 32, 2, 32, 32, 16);
+  gr.addColorStop(0, "#ffffff"); gr.addColorStop(0.35, "#c89aff"); gr.addColorStop(1, "rgba(120,0,255,0)");
+  g.fillStyle = gr; g.beginPath(); g.arc(32, 32, 16, 0, 7); g.fill();
+});
+// ---------- Audio: chiptune sequencer + sfx (all synthesized) ----------
+let AC = null, masterGain = null, muted = false, musicTimer = null, step = 0;
+function initAudio() {
+  if (AC) { if (AC.state === "suspended") AC.resume(); return; }
+  try {
+    AC = new (window.AudioContext || window.webkitAudioContext)();
+    masterGain = AC.createGain(); masterGain.gain.value = 0.5;
+    masterGain.connect(AC.destination);
+  } catch (e) { AC = null; }
+}
+function tone(freq, t, dur, type, vol, slideTo) {
+  if (!AC || muted) return;
+  const o = AC.createOscillator(), g = AC.createGain();
+  o.type = type; o.frequency.setValueAtTime(freq, t);
+  if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.connect(g); g.connect(masterGain);
+  o.start(t); o.stop(t + dur + 0.02);
+}
+function noiseHit(t, dur, vol) {
+  if (!AC || muted) return;
+  const len = Math.max(1, (dur * AC.sampleRate) | 0);
+  const buf = AC.createBuffer(1, len, AC.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / len);
+  const src = AC.createBufferSource(); src.buffer = buf;
+  const g = AC.createGain(); g.gain.value = vol;
+  src.connect(g); g.connect(masterGain); src.start(t);
+}
+// A dark 32-step loop in A minor: bass pulse + sparse lead + hats.
+const BASS = [55,0,55,0, 65.4,0,55,0, 49,0,49,0, 73.4,0,82.4,0,
+              55,0,55,0, 65.4,0,55,0, 98,0,82.4,0, 73.4,0,61.7,0];
+const LEAD = [440,0,0,523, 0,0,659,0, 587,0,0,440, 0,0,0,0,
+              440,0,0,523, 0,0,784,0, 659,0,587,0, 523,0,0,0];
+function musicStep() {
+  if (!AC || muted) return;
+  const t = AC.currentTime + 0.03;
+  const i = step % 32;
+  if (BASS[i]) tone(BASS[i], t, 0.16, "triangle", 0.5);
+  if (LEAD[i]) tone(LEAD[i], t, 0.14, "square", 0.12);
+  if (i % 2 === 0) noiseHit(t, 0.03, 0.05);
+  if (i % 8 === 4) noiseHit(t, 0.09, 0.10);
+  step++;
+}
+function startMusic() {
+  initAudio();
+  if (!AC || musicTimer) return;
+  step = 0;
+  musicTimer = setInterval(musicStep, 132);   // ~113 BPM 16th notes
+}
+function sfx(name) {
+  if (!AC || muted) return;
+  const t = AC.currentTime;
+  if (name === "shot") { tone(880, t, 0.09, "square", 0.16, 140); noiseHit(t, 0.05, 0.10); }
+  else if (name === "eshot") { tone(300, t, 0.14, "sawtooth", 0.10, 90); }
+  else if (name === "hit") { tone(200, t, 0.06, "square", 0.14, 80); }
+  else if (name === "die") { tone(320, t, 0.3, "sawtooth", 0.16, 40); noiseHit(t, 0.2, 0.12); }
+  else if (name === "hurt") { tone(140, t, 0.15, "sawtooth", 0.2, 60); }
+  else if (name === "portal") { tone(240, t, 0.22, "sine", 0.3, 1200); tone(360, t + 0.03, 0.2, "sine", 0.2, 1600); }
+  else if (name === "pickup") { tone(660, t, 0.08, "square", 0.14); tone(990, t + 0.08, 0.12, "square", 0.14); }
+  else if (name === "wave") { tone(392, t, 0.12, "square", 0.16); tone(523, t + 0.12, 0.12, "square", 0.16); tone(659, t + 0.24, 0.2, "square", 0.16); }
+  else if (name === "empty") { tone(1200, t, 0.04, "square", 0.08); }
+  else if (name === "win") { [523, 659, 784, 1046].forEach((f, i) => tone(f, t + i * 0.13, 0.22, "square", 0.16)); }
+  else if (name === "lose") { [392, 330, 262, 196].forEach((f, i) => tone(f, t + i * 0.16, 0.26, "sawtooth", 0.14)); }
+}
+const mutebtn = document.getElementById("mutebtn");
+mutebtn.addEventListener("click", () => {
+  muted = !muted;
+  mutebtn.textContent = muted ? "Sound: Off" : "Sound: On";
+  if (masterGain) masterGain.gain.value = muted ? 0 : 0.5;
+});
+
+// ---------- Game state ----------
+const hud = document.getElementById("hud");
+const hudhp = document.getElementById("hudhp");
+const hudwave = document.getElementById("hudwave");
+const hudammo = document.getElementById("hudammo");
+const msgEl = document.getElementById("msg");
+const dmgEl = document.getElementById("dmgflash");
+let msgTimer = 0;
+function showMsg(t, dur) {
+  msgEl.textContent = t; msgEl.style.opacity = 1;
+  msgTimer = dur || 2;
+}
+
+const player = {
+  x: 2.5, y: 7.5, ang: 0, vx: 0, vy: 0,
+  hp: 100, maxhp: 100, ammo: 60, maxammo: 120,
+  radius: 0.22, fireCd: 0, portalCd: 0, hurtT: 0
+};
+let enemies = [], projs = [], pickups = [], particles = [];
+let wave = 0, spawnQueue = [], spawnTimer = 0, intermission = 0;
+let mode = "title";           // title | playing | win | over
+let demo = false, demoState = null;
+let shotsFired = 0, kills = 0, startTime = 0;
+
+const SPAWNS = [[8.5, 1.5], [8.5, 14.5], [1.5, 3.5], [14.5, 12.5], [1.5, 12.5], [14.5, 3.5]];
+const PICKUP_SPOTS = [
+  { x: 2.5, y: 2.5, kind: "health" }, { x: 13.5, y: 13.5, kind: "health" },
+  { x: 13.5, y: 2.5, kind: "ammo" }, { x: 2.5, y: 13.5, kind: "ammo" },
+  { x: 8.5, y: 8.5, kind: "health" }
+];
+function resetGame() {
+  player.x = 2.5; player.y = 7.5; player.ang = 0; player.vx = 0; player.vy = 0;
+  player.hp = player.maxhp; player.ammo = 60;
+  player.fireCd = 0; player.portalCd = 0; player.hurtT = 0;
+  enemies = []; projs = []; particles = [];
+  pickups = PICKUP_SPOTS.map(s => ({ x: s.x, y: s.y, kind: s.kind, active: true, respawn: 0, bob: Math.random() * 6 }));
+  wave = 0; spawnQueue = []; spawnTimer = 0; intermission = 0.8;
+  shotsFired = 0; kills = 0; startTime = performance.now();
+  demoState = { phase: "portal", strafeDir: 1, strafeT: 0, target: null };
+}
+function startWave(n) {
+  wave = n;
+  const comp = [];
+  if (n === 1) { for (let i = 0; i < 4; i++) comp.push("chaser"); }
+  if (n === 2) { for (let i = 0; i < 5; i++) comp.push("chaser"); comp.push("spitter", "spitter"); }
+  if (n === 3) { for (let i = 0; i < 6; i++) comp.push("chaser"); for (let i = 0; i < 4; i++) comp.push("spitter"); }
+  spawnQueue = comp;
+  spawnTimer = 0.2;
+  showMsg("WAVE " + n, 1.8);
+  sfx("wave");
+  updateHUD();
+}
+function spawnEnemy(kind) {
+  const sp = SPAWNS[(Math.random() * SPAWNS.length) | 0];
+  const e = {
+    kind: kind, x: sp[0] + (Math.random() - 0.5), y: sp[1] + (Math.random() - 0.5),
+    hp: kind === "chaser" ? 30 : 24, maxhp: kind === "chaser" ? 30 : 24,
+    vx: 0, vy: 0, atkCd: 0, fireCd: 1 + Math.random(), hitT: 0, spawnT: 0.5,
+    radius: 0.3, portalCd: 0, ang: 0
+  };
+  enemies.push(e);
+}
+function updateHUD() {
+  hudhp.innerHTML = "HEALTH <b>" + Math.max(0, Math.ceil(player.hp)) + "</b>";
+  hudhp.className = "box" + (player.hp <= 30 ? " low" : "");
+  hudwave.innerHTML = "WAVE <b>" + Math.max(1, wave) + "/3</b>" + (demo ? " · DEMO" : "");
+  hudammo.innerHTML = "AMMO <b>" + player.ammo + "</b>";
+  hudammo.className = "box" + (player.ammo <= 8 ? " low" : "");
+}
+
+// ---------- Movement & collision (velocity-based; portals keep momentum) ----------
+function tryTeleport(ent, nx, ny, isPlayer) {
+  // If the entity's center would enter a portal tile, run the transform.
+  const t = tileAt(nx, ny);
+  if ((t === "A" || t === "B") && ent.portalCd <= 0) {
+    const r = portalTransform(nx, ny, ent.vx || 0, ent.vy || 0, ent.ang || 0, t);
+    ent.x = r.x; ent.y = r.y;
+    if (ent.vx !== undefined) { ent.vx = r.vx; ent.vy = r.vy; }
+    if (isPlayer) { player.ang = r.ang; player.portalCd = 0.3; sfx("portal"); }
+    return true;
+  }
+  return false;
+}
+function moveEntity(ent, dx, dy, isPlayer) {
+  // Axis-separated circle collision; portal tiles teleport instead of blocking.
+  if (ent.radius === undefined) ent.radius = 0.25;
+  let nx = ent.x + dx;
+  if (tryTeleport(ent, nx, ent.y, isPlayer)) return;
+  if (!isSolid(nx + Math.sign(dx) * ent.radius, ent.y - ent.radius * 0.8) &&
+      !isSolid(nx + Math.sign(dx) * ent.radius, ent.y + ent.radius * 0.8) &&
+      !isSolid(nx + Math.sign(dx) * ent.radius, ent.y))
+    ent.x = nx;
+  let ny = ent.y + dy;
+  if (tryTeleport(ent, ent.x, ny, isPlayer)) return;
+  if (!isSolid(ent.x - ent.radius * 0.8, ny + Math.sign(dy) * ent.radius) &&
+      !isSolid(ent.x + ent.radius * 0.8, ny + Math.sign(dy) * ent.radius) &&
+      !isSolid(ent.x, ny + Math.sign(dy) * ent.radius))
+    ent.y = ny;
+}
+function losClear(x0, y0, x1, y1) {
+  const dx = x1 - x0, dy = y1 - y0;
+  const dist = Math.hypot(dx, dy);
+  const steps = Math.max(1, Math.ceil(dist / 0.1));
+  for (let i = 1; i < steps; i++) {
+    const t = i / steps;
+    if (isSolid(x0 + dx * t, y0 + dy * t)) return false;
+  }
+  return true;
+}
+// ---------- Combat ----------
+// Projectiles are physical objects: they fly, they knock enemies back, and
+// they pass through the portals (position + direction transformed), so a
+// shot fired into portal A can kill across the room out of portal B.
+function fireProjectile(x, y, ang, friendly) {
+  projs.push({
+    x: x, y: y, vx: Math.cos(ang) * 15, vy: Math.sin(ang) * 15,
+    friendly: friendly, life: 2.2, radius: 0.13, portalCd: 0
+  });
+}
+function playerFire() {
+  if (player.fireCd > 0 || mode !== "playing") return;
+  if (player.ammo <= 0) { sfx("empty"); player.fireCd = 0.25; return; }
+  player.ammo--;
+  shotsFired++;
+  player.fireCd = 0.16;
+  fireProjectile(player.x + Math.cos(player.ang) * 0.35,
+                 player.y + Math.sin(player.ang) * 0.35, player.ang, true);
+  sfx("shot");
+  updateHUD();
+}
+function burst(x, y, col, n) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, sp = 0.6 + Math.random() * 1.6;
+    particles.push({ x: x, y: y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 0.4, col: col });
+  }
+}
+function hurtPlayer(dmg) {
+  if (mode !== "playing") return;
+  player.hp -= dmg;
+  player.hurtT = 0.35;
+  dmgEl.style.opacity = Math.min(1, 0.35 + dmg / 18);
+  sfx("hurt");
+  updateHUD();
+  if (player.hp <= 0) {
+    player.hp = 0;
+    mode = "over";
+    sfx("lose");
+    document.getElementById("overstats").textContent =
+      "You fell on wave " + wave + " with " + kills + " kills.";
+    document.getElementById("overov").classList.remove("hidden");
+    document.exitPointerLock && document.exitPointerLock();
+  }
+}
+function updateProjectiles(dt) {
+  for (let i = projs.length - 1; i >= 0; i--) {
+    const p = projs[i];
+    p.life -= dt; p.portalCd -= dt;
+    const steps = 3;
+    let dead = false;
+    for (let s = 0; s < steps && !dead; s++) {
+      const nx = p.x + p.vx * dt / steps, ny = p.y + p.vy * dt / steps;
+      const t = tileAt(nx, ny);
+      if ((t === "A" || t === "B") && p.portalCd <= 0) {
+        // Through the portal: same transform as the player.
+        const ang = Math.atan2(p.vy, p.vx);
+        const r = portalTransform(nx, ny, p.vx, p.vy, ang, t);
+        p.x = r.x; p.y = r.y; p.vx = r.vx; p.vy = r.vy; p.portalCd = 0.25;
+        burst(p.x, p.y, "#7df9ff", 4);
+        continue;
+      }
+      if (isSolid(nx, ny)) { burst(p.x, p.y, "#ffd75e", 3); dead = true; break; }
+      p.x = nx; p.y = ny;
+      if (p.friendly) {
+        for (const e of enemies) {
+          if (e.spawnT > 0) continue;
+          const d = Math.hypot(e.x - p.x, e.y - p.y);
+          if (d < 0.42) {
+            e.hp -= 12; e.hitT = 0.12;
+            const ka = Math.atan2(p.vy, p.vx);   // knockback impulse
+            e.vx += Math.cos(ka) * 2.4; e.vy += Math.sin(ka) * 2.4;
+            burst(p.x, p.y, "#ff8a5a", 5);
+            sfx("hit");
+            if (e.hp <= 0) { kills++; burst(e.x, e.y, "#ff5a5a", 16); sfx("die"); e.dead = true; }
+            dead = true; break;
+          }
+        }
+      } else {
+        const d = Math.hypot(player.x - p.x, player.y - p.y);
+        if (d < 0.34) { hurtPlayer(6); dead = true; }
+      }
+    }
+    if (dead || p.life <= 0) projs.splice(i, 1);
+  }
+  enemies = enemies.filter(e => !e.dead);
+}
+function updateEnemies(dt) {
+  for (const e of enemies) {
+    if (e.spawnT > 0) { e.spawnT -= dt; continue; }
+    e.hitT -= dt; e.atkCd -= dt; e.fireCd -= dt; e.portalCd -= dt;
+    const dx = player.x - e.x, dy = player.y - e.y;
+    const dist = Math.hypot(dx, dy) || 0.001;
+    const ux = dx / dist, uy = dy / dist;
+    let mx = 0, my = 0;
+    if (e.kind === "chaser") {
+      if (dist > 0.62) { mx = ux; my = uy; }
+      if (dist < 0.8 && e.atkCd <= 0) { hurtPlayer(7); e.atkCd = 0.8; }
+    } else { // spitter: keep ~4 tiles, shoot slow orbs
+      if (dist > 4.6) { mx = ux; my = uy; }
+      else if (dist < 3.4) { mx = -ux; my = -uy; }
+      else { mx = -uy * 0.5; my = ux * 0.5; }
+      if (e.fireCd <= 0 && dist < 9.5 && losClear(e.x, e.y, player.x, player.y)) {
+        const p = { x: e.x, y: e.y, vx: ux * 4.6, vy: uy * 4.6, friendly: false, life: 3, radius: 0.15, portalCd: 0 };
+        projs.push(p);
+        e.fireCd = 2.4;
+        sfx("eshot");
+      }
+    }
+    const spd = e.kind === "chaser" ? 1.65 : 1.35;
+    // desired velocity + knockback velocity (decays)
+    const dvx = mx * spd + e.vx, dvy = my * spd + e.vy;
+    e.vx *= Math.pow(0.02, dt); e.vy *= Math.pow(0.02, dt);
+    moveEntity(e, dvx * dt, dvy * dt, false);
+  }
+  // gentle separation so enemies do not stack into one blob
+  for (let i = 0; i < enemies.length; i++) for (let j = i + 1; j < enemies.length; j++) {
+    const a = enemies[i], b = enemies[j];
+    const dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+    if (d > 0.001 && d < 0.55) {
+      const push = (0.55 - d) / 2;
+      a.x -= dx / d * push; a.y -= dy / d * push;
+      b.x += dx / d * push; b.y += dy / d * push;
+    }
+  }
+}
+function updatePickups(dt) {
+  for (const pk of pickups) {
+    pk.bob += dt * 3;
+    if (!pk.active) {
+      pk.respawn -= dt;
+      if (pk.respawn <= 0) pk.active = true;
+      continue;
+    }
+    const d = Math.hypot(player.x - pk.x, player.y - pk.y);
+    if (d < 0.55) {
+      if (pk.kind === "health" && player.hp < player.maxhp) {
+        player.hp = Math.min(player.maxhp, player.hp + 30);
+      } else if (pk.kind === "ammo" && player.ammo < player.maxammo) {
+        player.ammo = Math.min(player.maxammo, player.ammo + 24);
+      } else continue;
+      pk.active = false; pk.respawn = 18;
+      burst(pk.x, pk.y, "#8dff7d", 8);
+      sfx("pickup");
+      updateHUD();
+    }
+  }
+}
+
+// ---------- Demo bot ----------
+// The bot drives the same velocity/collision code as a human: it steers,
+// aims, fires, grabs pickups when hurt or dry, and — first thing — walks
+// through portal A on purpose, so the demo proves the portal works too.
+function botThink(dt) {
+  const P = player;
+  const D = demoState;
+  D.strafeT -= dt;
+  if (D.strafeT <= 0) { D.strafeDir = Math.random() < 0.5 ? -1 : 1; D.strafeT = 0.9 + Math.random() * 0.8; }
+  let moveX = 0, moveY = 0, wantAng = null, firing = false;
+
+  function steerTo(tx, ty, arrive) {
+    const dx = tx - P.x, dy = ty - P.y, d = Math.hypot(dx, dy);
+    if (d > (arrive || 0.3)) { moveX += dx / d; moveY += dy / d; }
+    return d;
+  }
+
+  if (D.phase === "portal") {
+    // Head for portal A's mouth and walk in (target just inside the tile).
+    steerTo(0.4, 7.5, 0.05);
+    wantAng = Math.PI;
+    if (P.portalCd > 0.25 || P.x > 10) { D.phase = "fight"; }  // teleported!
+    // Fallback: if somehow stuck for a while, give up and fight.
+    D.portalT = (D.portalT || 0) + dt;
+    if (D.portalT > 12) D.phase = "fight";
+  } else {
+    // Choose target: nearest living enemy
+    let tgt = null, td = 1e9;
+    for (const e of enemies) {
+      if (e.spawnT > 0) continue;
+      const d = Math.hypot(e.x - P.x, e.y - P.y);
+      if (d < td) { td = d; tgt = e; }
+    }
+    const needHealth = P.hp < 45, needAmmo = P.ammo <= 4;
+    let pk = null;
+    if (needHealth || needAmmo) {
+      for (const q of pickups) {
+        if (!q.active) continue;
+        if ((needHealth && q.kind === "health") || (needAmmo && q.kind === "ammo")) { pk = q; break; }
+      }
+    }
+    if (pk && (needHealth || needAmmo || !tgt)) {
+      steerTo(pk.x, pk.y, 0.2);
+      if (tgt) wantAng = Math.atan2(tgt.y - P.y, tgt.x - P.x);
+    } else if (tgt) {
+      const desired = tgt.kind === "chaser" ? 2.6 : 3.6;
+      const dx = tgt.x - P.x, dy = tgt.y - P.y;
+      const ux = dx / td, uy = dy / td;
+      if (td > desired + 0.35) { moveX += ux; moveY += uy; }
+      else if (td < desired - 0.35) { moveX -= ux; moveY -= uy; }
+      moveX += -uy * D.strafeDir * 0.85;   // orbit while fighting
+      moveY += ux * D.strafeDir * 0.85;
+      wantAng = Math.atan2(dy, dx);
+      const angDiff = Math.abs(normAng(wantAng - P.ang));
+      if (angDiff < 0.1 && td < 11 && losClear(P.x, P.y, tgt.x, tgt.y)) firing = true;
+    } else if (spawnQueue.length === 0 && enemies.length === 0 && wave >= 1 && wave < 3) {
+      // between waves: drift to the middle
+      steerTo(8.5, 8.5, 0.6);
+    }
+  }
+  // Apply: turn toward wantAng at a capped rate, move via velocity model
+  if (wantAng !== null) {
+    let diff = normAng(wantAng - P.ang);
+    const turn = 4.2 * dt;
+    P.ang += Math.max(-turn, Math.min(turn, diff));
+  }
+  const ml = Math.hypot(moveX, moveY);
+  const spd = 3.1;
+  const dvx = ml > 0 ? moveX / ml * spd : 0;
+  const dvy = ml > 0 ? moveY / ml * spd : 0;
+  P.vx += (dvx - P.vx) * Math.min(1, dt * 8);
+  P.vy += (dvy - P.vy) * Math.min(1, dt * 8);
+  if (firing) playerFire();
+}
+function normAng(a) {
+  while (a > Math.PI) a -= Math.PI * 2;
+  while (a < -Math.PI) a += Math.PI * 2;
+  return a;
+}
+// ---------- Renderer: raycaster + billboards ----------
+const zbuf = new Float32Array(W / 2);
+function render(time) {
+  // ceiling / floor
+  let grad = ctx.createLinearGradient(0, 0, 0, H / 2);
+  grad.addColorStop(0, "#070714"); grad.addColorStop(1, "#232040");
+  ctx.fillStyle = grad; ctx.fillRect(0, 0, W, H / 2);
+  grad = ctx.createLinearGradient(0, H / 2, 0, H);
+  grad.addColorStop(0, "#2a1f18"); grad.addColorStop(1, "#0d0a08");
+  ctx.fillStyle = grad; ctx.fillRect(0, H / 2, W, H / 2);
+
+  const dirX = Math.cos(player.ang), dirY = Math.sin(player.ang);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+  const step = 2;
+  for (let x = 0; x < W; x += step) {
+    const cameraX = 2 * x / W - 1;
+    const rdx = dirX + planeX * cameraX, rdy = dirY + planeY * cameraX;
+    let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+    const ddx = Math.abs(1 / (rdx || 1e-9)), ddy = Math.abs(1 / (rdy || 1e-9));
+    let stepX, stepY, sdx, sdy;
+    if (rdx < 0) { stepX = -1; sdx = (player.x - mapX) * ddx; } else { stepX = 1; sdx = (mapX + 1 - player.x) * ddx; }
+    if (rdy < 0) { stepY = -1; sdy = (player.y - mapY) * ddy; } else { stepY = 1; sdy = (mapY + 1 - player.y) * ddy; }
+    let tile = ".", side = 0, guard = 0;
+    while (guard++ < 64) {
+      if (sdx < sdy) { sdx += ddx; mapX += stepX; side = 0; } else { sdy += ddy; mapY += stepY; side = 1; }
+      tile = (mapX < 0 || mapY < 0 || mapX >= MW || mapY >= MH) ? "#" : MAP[mapY].charAt(mapX);
+      if (tile !== ".") break;
+    }
+    const perp = side === 0 ? sdx - ddx : sdy - ddy;
+    const dist = Math.max(perp, 0.0001);
+    zbuf[x / step] = dist;
+    const lineH = H / dist;
+    const y0 = (H - lineH) / 2;
+    let wallX = side === 0 ? player.y + perp * rdy : player.x + perp * rdx;
+    wallX -= Math.floor(wallX);
+    let texX = Math.floor(wallX * 64);
+    if (side === 0 && rdx > 0) texX = 63 - texX;
+    if (side === 1 && rdy < 0) texX = 63 - texX;
+    const tex = tile === "P" ? TEX.pillar : tile === "A" ? TEX.portalA : tile === "B" ? TEX.portalB : TEX.wall;
+    ctx.drawImage(tex, texX, 0, 1, 64, x, y0, step, lineH);
+    // fog + side shading
+    const fog = Math.min(0.82, dist / 15) * (side ? 1 : 0.82) + (side ? 0.14 : 0);
+    if (fog > 0.02) { ctx.fillStyle = "rgba(4,5,12," + fog.toFixed(3) + ")"; ctx.fillRect(x, y0, step, lineH); }
+    if (tile === "A" || tile === "B") {
+      const pulse = 0.10 + 0.08 * Math.sin(time / 260 + (tile === "A" ? 0 : 2));
+      ctx.fillStyle = tile === "A" ? "rgba(18,230,200," + pulse + ")" : "rgba(255,90,210," + pulse + ")";
+      ctx.fillRect(x, y0, step, lineH);
+    }
+  }
+
+  // ---- sprites (far to near) ----
+  const items = [];
+  for (const e of enemies) items.push({ x: e.x, y: e.y, kind: "enemy", e: e });
+  for (const pk of pickups) if (pk.active) items.push({ x: pk.x, y: pk.y, kind: "pickup", pk: pk });
+  for (const p of projs) items.push({ x: p.x, y: p.y, kind: "proj", p: p });
+  for (const it of items) {
+    it.d2 = (it.x - player.x) * (it.x - player.x) + (it.y - player.y) * (it.y - player.y);
+  }
+  items.sort((a, b) => b.d2 - a.d2);
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  for (const it of items) {
+    const relX = it.x - player.x, relY = it.y - player.y;
+    const tx = invDet * (dirY * relX - dirX * relY);
+    const ty = invDet * (-planeY * relX + planeX * relY);   // depth
+    if (ty <= 0.15) continue;
+    const screenX = (W / 2) * (1 + tx / ty);
+    const wallH = H / ty;
+    let sizeF = 0.92, img = null, vOff = 0;
+    if (it.kind === "enemy") {
+      img = it.e.hitT > 0 ? (it.e.kind === "chaser" ? SPR.chaserHit : SPR.spitterHit)
+                          : (it.e.kind === "chaser" ? SPR.chaser : SPR.spitter);
+      if (it.e.spawnT > 0) sizeF *= (1 - it.e.spawnT * 0.9);
+    } else if (it.kind === "pickup") {
+      img = it.pk.kind === "health" ? SPR.health : SPR.ammo;
+      sizeF = 0.5; vOff = Math.sin(it.pk.bob) * 0.05;
+    } else {
+      img = it.p.friendly ? SPR.orb : SPR.eorb;
+      sizeF = 0.3; vOff = 0.35;
+    }
+    const size = wallH * sizeF;
+    const bottom = H / 2 + wallH / 2 - vOff * wallH;
+    const top = bottom - size;
+    const left = screenX - size / 2;
+    const stripeW = 2;
+    for (let sx = Math.max(0, Math.floor(left)); sx < left + size && sx < W; sx += stripeW) {
+      const zi = Math.floor(sx / 2);
+      if (ty >= zbuf[zi]) continue;
+      const srcX = Math.floor((sx - left) / size * 64);
+      if (srcX < 0 || srcX > 63) continue;
+      ctx.drawImage(img, srcX, 0, 1, 64, sx, top, stripeW, size);
+    }
+    // enemy health bar
+    if (it.kind === "enemy" && it.e.hp < it.e.maxhp && ty < 12) {
+      const bw = size * 0.7, bx = screenX - bw / 2, by = top - 8;
+      ctx.fillStyle = "rgba(0,0,0,0.6)"; ctx.fillRect(bx, by, bw, 5);
+      ctx.fillStyle = "#5aff5a"; ctx.fillRect(bx, by, bw * Math.max(0, it.e.hp / it.e.maxhp), 5);
+    }
+  }
+
+  // particles (simple world dots via sprite path is overkill: draw as orbs)
+  for (const pt of particles) {
+    const relX = pt.x - player.x, relY = pt.y - player.y;
+    const ty = invDet * (-planeY * relX + planeX * relY);
+    if (ty <= 0.2) continue;
+    const tx = invDet * (dirY * relX - dirX * relY);
+    const sx = (W / 2) * (1 + tx / ty);
+    const r = Math.max(1, (H / ty) * 0.03);
+    ctx.fillStyle = pt.col;
+    ctx.beginPath(); ctx.arc(sx, H / 2, r, 0, 7); ctx.fill();
+  }
+
+  // ---- weapon viewmodel + crosshair ----
+  if (mode === "playing") {
+    const bob = Math.sin(performance.now() / 90) * Math.min(6, Math.hypot(player.vx, player.vy) * 2);
+    const gx = W / 2 - 34, gy = H - 74 + bob;
+    ctx.fillStyle = "#1c2130"; ctx.fillRect(gx, gy, 68, 74);
+    ctx.fillStyle = "#2c3550"; ctx.fillRect(gx + 10, gy - 26, 48, 34);
+    ctx.fillStyle = "#4d74e0"; ctx.fillRect(gx + 26, gy - 34, 16, 10);
+    ctx.fillStyle = "#0d0f16"; ctx.fillRect(gx + 29, gy - 52, 10, 20);
+    if (player.fireCd > 0.08) {
+      ctx.fillStyle = "rgba(255,190,60,0.9)";
+      ctx.beginPath(); ctx.arc(W / 2, gy - 58, 10 + Math.random() * 5, 0, 7); ctx.fill();
+    }
+    ctx.strokeStyle = "rgba(230,240,255,0.9)"; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(W / 2, H / 2, 7, 0, 7); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.fillRect(W / 2 - 1, H / 2 - 1, 2, 2);
+  }
+}
+// ---------- Input ----------
+const keys = {};
+let mouseDown = false, touchFire = false;
+window.addEventListener("keydown", e => {
+  keys[e.code] = true;
+  if (["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Space"].includes(e.code)) e.preventDefault();
+});
+window.addEventListener("keyup", e => { keys[e.code] = false; });
+cv.addEventListener("mousedown", e => {
+  if (mode !== "playing" || demo) return;
+  mouseDown = true;
+  if (document.pointerLockElement !== cv && e.pointerType !== "touch")
+    cv.requestPointerLock && cv.requestPointerLock();
+});
+window.addEventListener("mouseup", () => { mouseDown = false; });
+document.addEventListener("mousemove", e => {
+  if (mode !== "playing" || demo) return;
+  if (document.pointerLockElement === cv) player.ang += e.movementX * 0.0023;
+});
+// Drag-look (works without pointer lock, incl. synthetic pointer drags)
+let dragLook = null;
+cv.addEventListener("pointerdown", e => { dragLook = { id: e.pointerId, x: e.clientX }; });
+window.addEventListener("pointermove", e => {
+  if (!dragLook || e.pointerId !== dragLook.id) return;
+  if (mode === "playing" && !demo && document.pointerLockElement !== cv)
+    player.ang += (e.clientX - dragLook.x) * 0.005;
+  dragLook.x = e.clientX;
+});
+window.addEventListener("pointerup", e => { if (dragLook && e.pointerId === dragLook.id) dragLook = null; });
+window.addEventListener("pointercancel", () => { dragLook = null; });
+
+// Touch: left-half virtual stick to move, FIRE button to shoot
+const touchEl = document.getElementById("touch");
+const stickEl = document.getElementById("stick");
+const knobEl = document.getElementById("stickknob");
+const fireBtn = document.getElementById("firebtn");
+let stickId = null, stickOX = 0, stickOY = 0, stickVec = { x: 0, y: 0 };
+function isTouchDevice() { return "ontouchstart" in window || navigator.maxTouchPoints > 0; }
+if (isTouchDevice()) touchEl.style.display = "block";
+document.addEventListener("touchstart", e => {
+  for (const t of e.changedTouches) {
+    if (t.clientX < window.innerWidth / 2 && stickId === null && mode === "playing") {
+      stickId = t.identifier; stickOX = t.clientX; stickOY = t.clientY;
+      stickEl.style.display = "block";
+      stickEl.style.left = (stickOX - 55) + "px"; stickEl.style.top = (stickOY - 55) + "px";
+      knobEl.style.left = "31px"; knobEl.style.top = "31px";
+    }
+  }
+}, { passive: false });
+document.addEventListener("touchmove", e => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) {
+      let dx = t.clientX - stickOX, dy = t.clientY - stickOY;
+      const l = Math.hypot(dx, dy);
+      if (l > 42) { dx = dx / l * 42; dy = dy / l * 42; }
+      stickVec = { x: dx / 42, y: dy / 42 };
+      knobEl.style.left = (31 + dx) + "px"; knobEl.style.top = (31 + dy) + "px";
+      e.preventDefault();
+    }
+  }
+}, { passive: false });
+function touchEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === stickId) {
+      stickId = null; stickVec = { x: 0, y: 0 };
+      stickEl.style.display = "none";
+    }
+  }
+}
+document.addEventListener("touchend", touchEnd);
+document.addEventListener("touchcancel", touchEnd);
+fireBtn.addEventListener("pointerdown", e => { e.preventDefault(); touchFire = true; });
+fireBtn.addEventListener("pointerup", () => { touchFire = false; });
+fireBtn.addEventListener("pointerleave", () => { touchFire = false; });
+fireBtn.addEventListener("touchstart", e => { e.preventDefault(); touchFire = true; }, { passive: false });
+fireBtn.addEventListener("touchend", e => { e.preventDefault(); touchFire = false; }, { passive: false });
+
+// ---------- Human control ----------
+function humanControl(dt) {
+  const P = player;
+  let f = 0, r = 0;
+  if (keys["KeyW"] || keys["ArrowUp"]) f += 1;
+  if (keys["KeyS"] || keys["ArrowDown"]) f -= 1;
+  if (keys["KeyD"]) r += 1;
+  if (keys["KeyA"]) r -= 1;
+  if (keys["ArrowLeft"]) P.ang -= 2.4 * dt;
+  if (keys["ArrowRight"]) P.ang += 2.4 * dt;
+  if (stickId !== null) { f += -stickVec.y; r += stickVec.x; }
+  const fx = Math.cos(P.ang), fy = Math.sin(P.ang);
+  const rx = -Math.sin(P.ang), ry = Math.cos(P.ang);
+  let dx = fx * f + rx * r, dy = fy * f + ry * r;
+  const l = Math.hypot(dx, dy);
+  const spd = 3.3;
+  if (l > 0.01) { dx = dx / l * spd; dy = dy / l * spd; } else { dx = 0; dy = 0; }
+  P.vx += (dx - P.vx) * Math.min(1, dt * 9);
+  P.vy += (dy - P.vy) * Math.min(1, dt * 9);
+  if (mouseDown || touchFire || keys["Space"]) playerFire();
+}
+
+// ---------- Main loop ----------
+let lastT = performance.now();
+function loop(now) {
+  requestAnimationFrame(loop);
+  let dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.05) dt = 0.05;
+  if (dt <= 0) { render(now); return; }
+
+  if (mode === "playing") {
+    player.fireCd -= dt; player.portalCd -= dt;
+    if (player.hurtT > 0) { player.hurtT -= dt; if (player.hurtT <= 0) dmgEl.style.opacity = 0; }
+
+    if (demo) botThink(dt); else humanControl(dt);
+    moveEntity(player, player.vx * dt, player.vy * dt, true);
+
+    // spawning / wave flow
+    if (spawnQueue.length > 0) {
+      spawnTimer -= dt;
+      if (spawnTimer <= 0) { spawnEnemy(spawnQueue.shift()); spawnTimer = 0.7; }
+    } else if (enemies.length === 0) {
+      if (wave >= 3) {
+        mode = "win";
+        sfx("win");
+        const secs = ((performance.now() - startTime) / 1000).toFixed(1);
+        document.getElementById("winstats").textContent =
+          (demo ? "The demo bot" : "You") + " cleared 3 waves in " + secs + "s — " +
+          kills + " kills, " + shotsFired + " shots fired.";
+        document.getElementById("winov").classList.remove("hidden");
+        document.exitPointerLock && document.exitPointerLock();
+      } else {
+        intermission -= dt;
+        if (intermission <= 0) { startWave(wave + 1); intermission = 2.4; }
+      }
+    }
+    updateEnemies(dt);
+    updateProjectiles(dt);
+    updatePickups(dt);
+  }
+  // particles always tick so menus stay alive
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const pt = particles[i];
+    pt.life -= dt; pt.x += pt.vx * dt; pt.y += pt.vy * dt;
+    if (pt.life <= 0) particles.splice(i, 1);
+  }
+  if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
+  if (mode === "title") player.ang = Math.sin(now / 2400) * 0.45;
+  render(now);
+}
+
+// ---------- Start / demo / restart wiring ----------
+function begin(isDemo) {
+  initAudio();
+  startMusic();
+  demo = isDemo;
+  resetGame();
+  mode = "playing";
+  document.getElementById("titleov").classList.add("hidden");
+  document.getElementById("winov").classList.add("hidden");
+  document.getElementById("overov").classList.add("hidden");
+  hud.style.display = "flex";
+  updateHUD();
+  showMsg(isDemo ? "DEMO — WATCH THE BOT" : "WAVE 1 INCOMING", 1.6);
+}
+document.getElementById("startbtn").addEventListener("click", () => begin(false));
+document.getElementById("demobtn").addEventListener("click", () => begin(true));
+document.getElementById("againbtn").addEventListener("click", () => begin(false));
+document.getElementById("retrybtn").addEventListener("click", () => begin(demo));
+
+resetGame();
+mode = "title";
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

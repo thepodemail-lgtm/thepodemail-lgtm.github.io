@@ -1,0 +1,3748 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>PORTALFELL — One-Room Portal Arena</title>
+<!--
+================================================================================
+CREDITS & ASSET MANIFEST — PORTALFELL
+================================================================================
+- Engine, Recursive Portal Raycaster, Physics Engine, Autonomous Demo Bot:
+  Original code written in-file (Public Domain / CC0).
+- Wall, Floor, Ceiling & Portal Frame Textures (64x64 procedural):
+  Generated procedurally via HTML5 Canvas / pixel arrays in-file (CC0).
+- Enemy, Pickup, Kinetic Core, Projectile & Weapon Sprites:
+  Generated procedurally via offscreen HTML5 Canvas pixel art in-file (CC0).
+- Looping Industrial Synth-Metal Soundtrack ("IRON PORTAL" 132 BPM) & SFX:
+  Synthesized in real time via Web Audio API in-file (CC0).
+- External Libraries / Network Requests: NONE (100% self-contained HTML).
+================================================================================
+-->
+<style>
+  :root {
+    --bg: #07080d;
+    --panel: rgba(11, 14, 22, 0.88);
+    --panel-strong: rgba(10, 12, 20, 0.96);
+    --border: rgba(255, 255, 255, 0.14);
+    --cyan: #22e3ff;
+    --cyan-dim: rgba(34, 227, 255, 0.2);
+    --orange: #ff7b1c;
+    --orange-dim: rgba(255, 123, 28, 0.22);
+    --red: #ff3855;
+    --green: #38f28a;
+    --gold: #ffd447;
+    --text: #eef3ff;
+    --muted: #93a0ba;
+    --font-ui: "Segoe UI", system-ui, -apple-system, Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: "Consolas", "Courier New", ui-monospace, SFMono-Regular, monospace;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  html, body {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    touch-action: none;
+  }
+
+  #game-wrap {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #05060a;
+  }
+
+  #view {
+    display: block;
+    width: 100%;
+    height: 100%;
+    cursor: crosshair;
+  }
+
+  /* Screen overlays (Title / Win / Game Over) */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background:
+      radial-gradient(circle at 20% 50%, rgba(34, 227, 255, 0.14), transparent 45%),
+      radial-gradient(circle at 80% 50%, rgba(255, 123, 28, 0.14), transparent 45%),
+      rgba(6, 8, 14, 0.86);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 30;
+  }
+
+  .overlay.hidden {
+    display: none;
+  }
+
+  .card {
+    width: 100%;
+    max-width: 620px;
+    background: var(--panel-strong);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 14px;
+    padding: 26px 28px;
+    box-shadow:
+      0 24px 64px rgba(0, 0, 0, 0.72),
+      0 0 0 1px rgba(34, 227, 255, 0.12) inset;
+    text-align: center;
+  }
+
+  .badge-row {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+  }
+
+  .pill {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .pill.cyan { color: var(--cyan); border-color: rgba(34, 227, 255, 0.4); background: var(--cyan-dim); }
+  .pill.orange { color: var(--orange); border-color: rgba(255, 123, 28, 0.45); background: var(--orange-dim); }
+  .pill.green { color: var(--green); border-color: rgba(56, 242, 138, 0.4); background: rgba(56, 242, 138, 0.15); }
+  .pill.red { color: var(--red); border-color: rgba(255, 56, 85, 0.45); background: rgba(255, 56, 85, 0.18); }
+
+  h1.title {
+    font-family: var(--font-mono);
+    font-size: clamp(34px, 6.5vw, 56px);
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    line-height: 1.05;
+    margin: 4px 0 8px;
+    background: linear-gradient(90deg, var(--cyan) 0%, #ffffff 48%, var(--orange) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    text-shadow: 0 0 32px rgba(34, 227, 255, 0.25);
+  }
+
+  .subtitle {
+    color: var(--muted);
+    font-size: 14px;
+    line-height: 1.45;
+    margin-bottom: 20px;
+  }
+
+  .btn-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    margin: 16px 0;
+  }
+
+  button.btn {
+    appearance: none;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    padding: 13px 22px;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    color: var(--text);
+    background: rgba(255, 255, 255, 0.07);
+    transition: transform 0.08s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  button.btn:hover {
+    transform: translateY(-1px);
+    background: rgba(255, 255, 255, 0.13);
+    border-color: rgba(255, 255, 255, 0.35);
+  }
+
+  button.btn:active {
+    transform: translateY(1px);
+  }
+
+  button.btn-primary {
+    background: linear-gradient(135deg, #00b8e6, #0078d4);
+    border-color: var(--cyan);
+    color: #031018;
+    box-shadow: 0 0 22px rgba(34, 227, 255, 0.34);
+  }
+
+  button.btn-primary:hover {
+    background: linear-gradient(135deg, #3beeff, #0c94f0);
+    box-shadow: 0 0 28px rgba(34, 227, 255, 0.55);
+  }
+
+  button.btn-demo {
+    background: linear-gradient(135deg, #ff8f2b, #d9480f);
+    border-color: var(--orange);
+    color: #1a0800;
+    box-shadow: 0 0 22px rgba(255, 123, 28, 0.32);
+  }
+
+  button.btn-demo:hover {
+    background: linear-gradient(135deg, #ffaa52, #f25918);
+    box-shadow: 0 0 28px rgba(255, 123, 28, 0.5);
+  }
+
+  button.btn-sm {
+    padding: 7px 12px;
+    font-size: 11px;
+    border-radius: 7px;
+  }
+
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    text-align: left;
+    margin-top: 16px;
+  }
+
+  .info-box {
+    background: rgba(255, 255, 255, 0.035);
+    border: 1px solid rgba(255, 255, 255, 0.09);
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--muted);
+  }
+
+  .info-box strong {
+    display: block;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+
+  .info-box kbd {
+    display: inline-block;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--cyan);
+    background: rgba(34, 227, 255, 0.12);
+    border: 1px solid rgba(34, 227, 255, 0.3);
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    margin: 18px 0;
+  }
+
+  .stat-cell {
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 9px;
+    padding: 10px 6px;
+  }
+
+  .stat-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .stat-val {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 800;
+    margin-top: 4px;
+    color: var(--text);
+  }
+
+  .credits-note {
+    margin-top: 14px;
+    font-size: 11px;
+    color: #6b7791;
+    font-family: var(--font-mono);
+  }
+
+  /* Gameplay HUD */
+  #hud {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 12px 14px;
+  }
+
+  #hud.hidden {
+    display: none;
+  }
+
+  .hud-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .hud-panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 12px;
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  }
+
+  .hud-wave-block {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  .hud-metric {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hud-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  .hud-num {
+    font-family: var(--font-mono);
+    font-size: 20px;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+
+  .hud-num.cyan { color: var(--cyan); }
+  .hud-num.orange { color: var(--orange); }
+  .hud-num.gold { color: var(--gold); }
+  .hud-num.red { color: var(--red); }
+  .hud-num.green { color: var(--green); }
+
+  .hud-center-top {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+
+  #demo-banner {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 123, 28, 0.18);
+    border: 1px solid rgba(255, 123, 28, 0.65);
+    color: #ffd8b5;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    pointer-events: auto;
+  }
+
+  #demo-banner.active {
+    display: flex;
+  }
+
+  .pulse-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--orange);
+    box-shadow: 0 0 10px var(--orange);
+    animation: blink 0.9s infinite alternate;
+  }
+
+  @keyframes blink {
+    from { opacity: 0.4; transform: scale(0.85); }
+    to { opacity: 1; transform: scale(1.15); }
+  }
+
+  #wave-toast {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 6px 16px;
+    border-radius: 8px;
+    background: rgba(12, 16, 28, 0.85);
+    border: 1px solid var(--cyan);
+    box-shadow: 0 0 22px rgba(34, 227, 255, 0.35);
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  #wave-toast.show {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  #medal-toast {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--gold);
+    background: rgba(25, 20, 8, 0.85);
+    border: 1px solid rgba(255, 212, 71, 0.55);
+    padding: 4px 12px;
+    border-radius: 999px;
+    opacity: 0;
+    transition: opacity 0.18s ease;
+  }
+
+  #medal-toast.show {
+    opacity: 1;
+  }
+
+  .hud-right-top {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+    pointer-events: auto;
+  }
+
+  .hud-actions {
+    display: flex;
+    gap: 6px;
+  }
+
+  #minimap {
+    width: 112px;
+    height: 112px;
+    border-radius: 9px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    background: rgba(7, 10, 18, 0.85);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+  }
+
+  .hud-bottom {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 10px;
+  }
+
+  .vital-group {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: flex-end;
+  }
+
+  .bar-box {
+    min-width: 148px;
+  }
+
+  .bar-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 5px;
+  }
+
+  .bar-track {
+    width: 100%;
+    height: 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.1);
+    overflow: hidden;
+  }
+
+  .bar-fill {
+    height: 100%;
+    border-radius: 999px;
+    transition: width 0.08s linear;
+  }
+
+  .bar-fill.hp { background: linear-gradient(90deg, #ff3855, #38f28a); }
+  .bar-fill.ammo { background: linear-gradient(90deg, #0088ff, #22e3ff); }
+  .bar-fill.pulse { background: linear-gradient(90deg, #ff7b1c, #ffd447); }
+
+  #pointer-hint {
+    position: absolute;
+    left: 50%;
+    bottom: 84px;
+    transform: translateX(-50%);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: rgba(238, 243, 255, 0.78);
+    background: rgba(8, 11, 20, 0.76);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    padding: 5px 12px;
+    border-radius: 999px;
+    pointer-events: none;
+    z-index: 16;
+    transition: opacity 0.25s ease;
+  }
+
+  #pointer-hint.hidden {
+    opacity: 0;
+  }
+
+  /* Touch controls */
+  #touch-controls {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 20;
+    display: none;
+  }
+
+  #touch-controls.active {
+    display: block;
+  }
+
+  #stick-zone {
+    position: absolute;
+    left: 18px;
+    bottom: 86px;
+    width: 124px;
+    height: 124px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.06);
+    border: 2px solid rgba(34, 227, 255, 0.35);
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  #stick-knob {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 48px;
+    height: 48px;
+    margin-left: -24px;
+    margin-top: -24px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 35%, #7bf2ff, #0c98c7);
+    border: 2px solid rgba(255, 255, 255, 0.75);
+    box-shadow: 0 0 18px rgba(34, 227, 255, 0.5);
+  }
+
+  #look-zone {
+    position: absolute;
+    right: 0;
+    top: 84px;
+    bottom: 0;
+    left: 44%;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  .touch-action-row {
+    position: absolute;
+    right: 18px;
+    bottom: 88px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    pointer-events: none;
+    z-index: 22;
+  }
+
+  .touch-btn {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.55);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.06em;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    pointer-events: auto;
+    touch-action: none;
+  }
+
+  #touch-fire {
+    background: radial-gradient(circle at 35% 35%, rgba(255, 86, 110, 0.92), rgba(185, 16, 46, 0.86));
+    box-shadow: 0 0 22px rgba(255, 56, 85, 0.5);
+  }
+
+  #touch-pulse {
+    width: 60px;
+    height: 60px;
+    align-self: flex-end;
+    font-size: 10px;
+    background: radial-gradient(circle at 35% 35%, rgba(255, 166, 56, 0.92), rgba(196, 76, 12, 0.86));
+    box-shadow: 0 0 18px rgba(255, 123, 28, 0.45);
+  }
+
+  @media (max-width: 680px) {
+    .card { padding: 18px 16px; }
+    .info-grid { grid-template-columns: 1fr; }
+    .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .bar-box { min-width: 112px; }
+    .hud-num { font-size: 16px; }
+    #minimap { width: 84px; height: 84px; }
+    .hud-wave-block { gap: 9px; }
+  }
+</style>
+</head>
+<body>
+<div id="game-wrap">
+  <canvas id="view"></canvas>
+
+  <!-- GAMEPLAY HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-top">
+      <div class="hud-panel hud-wave-block">
+        <div class="hud-metric">
+          <span class="hud-label">Wave</span>
+          <span class="hud-num cyan" id="hud-wave">1 / 3</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-label">Hostiles</span>
+          <span class="hud-num orange" id="hud-enemies">3</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-label">Portals</span>
+          <span class="hud-num cyan" id="hud-portals">0</span>
+        </div>
+        <div class="hud-metric">
+          <span class="hud-label">Phys Kills</span>
+          <span class="hud-num gold" id="hud-phys">0</span>
+        </div>
+      </div>
+
+      <div class="hud-center-top">
+        <div id="demo-banner">
+          <span class="pulse-dot"></span>
+          <span id="demo-state-text">DEMO BOT ACTIVE — ENGAGING</span>
+          <button type="button" class="btn btn-sm" id="btn-demo-stop">EXIT</button>
+        </div>
+        <div id="wave-toast">WAVE 1</div>
+        <div id="medal-toast">KINETIC CRUSH!</div>
+      </div>
+
+      <div class="hud-right-top">
+        <div class="hud-actions">
+          <button type="button" class="btn btn-sm" id="btn-hud-mute">AUDIO: ON</button>
+          <button type="button" class="btn btn-sm" id="btn-hud-menu">MENU</button>
+        </div>
+        <canvas id="minimap" width="128" height="128"></canvas>
+      </div>
+    </div>
+
+    <div class="hud-bottom">
+      <div class="vital-group">
+        <div class="hud-panel bar-box">
+          <div class="bar-head">
+            <span class="hud-label">Health</span>
+            <span class="hud-num green" id="hud-hp">100</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill hp" id="bar-hp" style="width:100%"></div></div>
+        </div>
+
+        <div class="hud-panel bar-box">
+          <div class="bar-head">
+            <span class="hud-label">Ammo</span>
+            <span class="hud-num cyan" id="hud-ammo">44</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill ammo" id="bar-ammo" style="width:70%"></div></div>
+        </div>
+
+        <div class="hud-panel bar-box">
+          <div class="bar-head">
+            <span class="hud-label">Grav-Pulse</span>
+            <span class="hud-num gold" id="hud-pulse">READY</span>
+          </div>
+          <div class="bar-track"><div class="bar-fill pulse" id="bar-pulse" style="width:100%"></div></div>
+        </div>
+      </div>
+
+      <div class="hud-panel" id="speed-panel">
+        <div class="hud-metric">
+          <span class="hud-label">Momentum</span>
+          <span class="hud-num cyan" id="hud-speed">0.0 m/s</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pointer-hint" class="hidden">CLICK ARENA TO LOCK MOUSE &bull; WASD MOVE &bull; LMB FIRE &bull; RMB / E GRAV-PULSE &bull; M MUTE</div>
+
+  <!-- TOUCH CONTROLS -->
+  <div id="touch-controls">
+    <div id="look-zone"></div>
+    <div id="stick-zone"><div id="stick-knob"></div></div>
+    <div class="touch-action-row">
+      <button type="button" class="touch-btn" id="touch-pulse">PULSE</button>
+      <button type="button" class="touch-btn" id="touch-fire">FIRE</button>
+    </div>
+  </div>
+
+  <!-- TITLE SCREEN -->
+  <div class="overlay" id="screen-title">
+    <div class="card">
+      <div class="badge-row">
+        <span class="pill cyan">ONE-ROOM RAYCAST BENCH</span>
+        <span class="pill orange">TRUE PORTAL PHYSICS</span>
+        <span class="pill green">ZERO EXTERNAL ASSETS</span>
+      </div>
+      <h1 class="title">PORTALFELL</h1>
+      <p class="subtitle">
+        One square arena. Two linked opposite-wall portals with live recursive sightlines, preserved velocity, and kinetic cores that tear through portals to crush hostiles across 3 escalating waves.
+      </p>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="btn-start">START ARENA</button>
+        <button type="button" class="btn btn-demo" id="btn-demo">DEMO MODE (BOT)</button>
+        <button type="button" class="btn" id="btn-title-mute">AUDIO: ON</button>
+      </div>
+
+      <div class="info-grid">
+        <div class="info-box">
+          <strong>Controls</strong>
+          Desktop: <kbd>WASD</kbd> move, Mouse aim, <kbd>Click</kbd> fire, <kbd>RMB</kbd>/<kbd>E</kbd> Grav-Pulse, <kbd>M</kbd> mute.<br>
+          Touch: Left thumbstick moves, right side drags aim, buttons fire &amp; pulse.
+        </div>
+        <div class="info-box">
+          <strong>Portal Physics &amp; Wildcard</strong>
+          Walk, shoot, or blast <b>Kinetic Cores</b> into the Cyan &amp; Orange portals. Speed carries through, boosts shots, slams foes into walls, and bowls cores for instant Physics Kills.
+        </div>
+      </div>
+
+      <div class="credits-note">
+        100% SELF-CONTAINED &bull; PROCEDURAL TEXTURES, SPRITES &amp; 132 BPM WEB AUDIO SYNTH SOUNDTRACK (CC0)
+      </div>
+    </div>
+  </div>
+
+  <!-- WIN SCREEN -->
+  <div class="overlay hidden" id="screen-win">
+    <div class="card">
+      <div class="badge-row">
+        <span class="pill green" id="win-mode-pill">ARENA CLEARED</span>
+        <span class="pill cyan">ALL 3 WAVES DEFEATED</span>
+      </div>
+      <h1 class="title">VICTORY</h1>
+      <p class="subtitle" id="win-sub">
+        All three hostile waves neutralized. Portal loop integrity verified.
+      </p>
+
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-label">Time</div>
+          <div class="stat-val" id="win-time">0.0s</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Portals Used</div>
+          <div class="stat-val" id="win-portals">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Physics Kills</div>
+          <div class="stat-val" id="win-phys">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">HP Left</div>
+          <div class="stat-val" id="win-hp">100</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="btn-win-restart">PLAY AGAIN</button>
+        <button type="button" class="btn btn-demo" id="btn-win-demo">WATCH DEMO</button>
+        <button type="button" class="btn" id="btn-win-title">TITLE MENU</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- GAME OVER SCREEN -->
+  <div class="overlay hidden" id="screen-over">
+    <div class="card">
+      <div class="badge-row">
+        <span class="pill red">VITALS DEPLETED</span>
+        <span class="pill orange" id="over-wave-pill">FELL ON WAVE 1</span>
+      </div>
+      <h1 class="title">GAME OVER</h1>
+      <p class="subtitle">
+        The arena claimed another runner. Keep moving, flank through portals, and use Kinetic Cores for breathing room.
+      </p>
+
+      <div class="stats-grid">
+        <div class="stat-cell">
+          <div class="stat-label">Wave</div>
+          <div class="stat-val" id="over-wave">1 / 3</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Slain</div>
+          <div class="stat-val" id="over-kills">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Portals Used</div>
+          <div class="stat-val" id="over-portals">0</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-label">Physics Kills</div>
+          <div class="stat-val" id="over-phys">0</div>
+        </div>
+      </div>
+
+      <div class="btn-row">
+        <button type="button" class="btn btn-primary" id="btn-over-retry">TRY AGAIN</button>
+        <button type="button" class="btn btn-demo" id="btn-over-demo">WATCH DEMO</button>
+        <button type="button" class="btn" id="btn-over-title">TITLE MENU</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ==========================================================================
+     1. MAP & PORTAL CONFIGURATION (One 16x16 Square Room, 4 Pillars, 2 Portals)
+     ========================================================================== */
+  const MAP_SIZE = 16;
+  // 0 = empty, 1 = outer wall, 2 = pillar, 3 = Portal A (West), 4 = Portal B (East)
+  const MAP = [];
+  for (let y = 0; y < MAP_SIZE; y++) {
+    const row = [];
+    for (let x = 0; x < MAP_SIZE; x++) {
+      let v = 0;
+      if (x === 0 || x === MAP_SIZE - 1 || y === 0 || y === MAP_SIZE - 1) v = 1;
+      row.push(v);
+    }
+    MAP.push(row);
+  }
+  // Four symmetrical cover pillars
+  const PILLARS = [
+    { gx: 4, gy: 4, cx: 4.5, cy: 4.5 },
+    { gx: 11, gy: 4, cx: 11.5, cy: 4.5 },
+    { gx: 4, gy: 11, cx: 4.5, cy: 11.5 },
+    { gx: 11, gy: 11, cx: 11.5, cy: 11.5 }
+  ];
+  for (const p of PILLARS) MAP[p.gy][p.gx] = 2;
+
+  // Two linked portals on opposite walls (2 units wide each: y in [7.0, 9.0])
+  MAP[7][0] = 3; MAP[8][0] = 3;
+  MAP[7][15] = 4; MAP[8][15] = 4;
+
+  const PORTAL_A = {
+    id: 1, tile: 3, name: 'CYAN',
+    x: 1.0, y: 8.0, nx: 1, ny: 0, angle: 0,
+    yMin: 7.0, yMax: 9.0, color: '#22e3ff'
+  };
+  const PORTAL_B = {
+    id: 2, tile: 4, name: 'ORANGE',
+    x: 15.0, y: 8.0, nx: -1, ny: 0, angle: Math.PI,
+    yMin: 7.0, yMax: 9.0, color: '#ff7b1c'
+  };
+  PORTAL_A.link = PORTAL_B;
+  PORTAL_B.link = PORTAL_A;
+
+  // Exact 2D rigid portal transform: rotates entering velocity/facing by out.angle - (in.angle + PI)
+  function getPortalDeltaAngle(inP, outP) {
+    return wrapAngle(outP.angle - (inP.angle + Math.PI));
+  }
+
+  function transformPointAndVec(x, y, vx, vy, inP, outP, pushOut) {
+    const dTheta = getPortalDeltaAngle(inP, outP);
+    const cos = Math.cos(dTheta);
+    const sin = Math.sin(dTheta);
+    const rx = x - inP.x;
+    const ry = y - inP.y;
+    const tx = outP.x + (rx * cos - ry * sin) + outP.nx * pushOut;
+    const ty = outP.y + (rx * sin + ry * cos) + outP.ny * pushOut;
+    const tvx = vx * cos - vy * sin;
+    const tvy = vx * sin + vy * cos;
+    return { x: tx, y: ty, vx: tvx, vy: tvy, dTheta };
+  }
+
+  function wrapAngle(a) {
+    while (a > Math.PI) a -= Math.PI * 2;
+    while (a < -Math.PI) a += Math.PI * 2;
+    return a;
+  }
+
+  function clamp(v, lo, hi) {
+    return v < lo ? lo : (v > hi ? hi : v);
+  }
+
+  function isSolidCell(gx, gy) {
+    if (gx < 0 || gy < 0 || gx >= MAP_SIZE || gy >= MAP_SIZE) return true;
+    return MAP[gy][gx] !== 0;
+  }
+
+  /* ==========================================================================
+     2. PROCEDURAL TEXTURES & PIXEL-ART SPRITES (64x64 Buffers, Zero External Files)
+     ========================================================================== */
+  const TEX_SIZE = 64;
+  function packRGBA(r, g, b, a = 255) {
+    return ((a & 255) << 24) | ((b & 255) << 16) | ((g & 255) << 8) | (r & 255);
+  }
+
+  function makeTextureBuffer(drawFn) {
+    const c = document.createElement('canvas');
+    c.width = TEX_SIZE;
+    c.height = TEX_SIZE;
+    const g = c.getContext('2d');
+    drawFn(g, TEX_SIZE);
+    const data = g.getImageData(0, 0, TEX_SIZE, TEX_SIZE).data;
+    const buf = new Uint32Array(TEX_SIZE * TEX_SIZE);
+    for (let i = 0; i < buf.length; i++) {
+      buf[i] = packRGBA(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], data[i * 4 + 3]);
+    }
+    return buf;
+  }
+
+  // Outer industrial steel-obsidian bunker wall
+  const TEX_WALL = makeTextureBuffer((g, s) => {
+    g.fillStyle = '#252a36';
+    g.fillRect(0, 0, s, s);
+    // Panel seams & rivets
+    for (let y = 0; y < s; y += 16) {
+      g.fillStyle = '#1b1f29';
+      g.fillRect(0, y, s, 2);
+      g.fillStyle = '#343c4e';
+      g.fillRect(0, y + 2, s, 1);
+    }
+    g.fillStyle = '#191d26';
+    g.fillRect(0, 0, 2, s);
+    g.fillRect(31, 0, 2, s);
+    g.fillStyle = '#3b4357';
+    g.fillRect(2, 0, 1, s);
+    g.fillRect(33, 0, 1, s);
+    // Subtle steel grain
+    for (let i = 0; i < 180; i++) {
+      const px = (i * 37) % s;
+      const py = (i * 53) % s;
+      g.fillStyle = i % 2 === 0 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.12)';
+      g.fillRect(px, py, 2, 1);
+    }
+    // Glowing tech trim band near middle
+    g.fillStyle = '#141720';
+    g.fillRect(0, 26, s, 10);
+    g.fillStyle = '#4f5d78';
+    g.fillRect(0, 27, s, 1);
+    g.fillRect(0, 34, s, 1);
+    g.fillStyle = '#d9483b';
+    g.fillRect(5, 30, 22, 2);
+    g.fillRect(37, 30, 22, 2);
+    // Rivets
+    g.fillStyle = '#5a6680';
+    for (const rx of [5, 27, 37, 59]) {
+      for (const ry of [6, 20, 42, 56]) {
+        g.fillRect(rx, ry, 2, 2);
+      }
+    }
+    // Baseboard hazard stripe
+    g.fillStyle = '#161820';
+    g.fillRect(0, 56, s, 8);
+    g.fillStyle = '#805226';
+    for (let x = 0; x < s; x += 12) {
+      g.fillRect(x, 58, 6, 4);
+    }
+  });
+
+  // Cover pillar: chiseled basalt & bronze monolith
+  const TEX_PILLAR = makeTextureBuffer((g, s) => {
+    g.fillStyle = '#2d2933';
+    g.fillRect(0, 0, s, s);
+    // Bevel edges
+    g.fillStyle = '#474052';
+    g.fillRect(0, 0, 4, s);
+    g.fillRect(0, 0, s, 4);
+    g.fillStyle = '#18151d';
+    g.fillRect(s - 4, 0, 4, s);
+    g.fillRect(0, s - 4, s, 4);
+    // Inset stone ribs
+    g.fillStyle = '#221e28';
+    g.fillRect(8, 8, s - 16, s - 16);
+    g.fillStyle = '#3a3444';
+    for (let y = 10; y < s - 10; y += 9) {
+      g.fillRect(10, y, s - 20, 4);
+    }
+    // Glowing copper runic core strip
+    g.fillStyle = '#ff9838';
+    g.fillRect(29, 12, 6, 40);
+    g.fillStyle = '#fff0b8';
+    g.fillRect(31, 14, 2, 36);
+  });
+
+  // Floor: dark industrial steel grate tiles
+  const TEX_FLOOR = makeTextureBuffer((g, s) => {
+    g.fillStyle = '#161a24';
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = '#1f2533';
+    g.fillRect(2, 2, 28, 28);
+    g.fillRect(34, 2, 28, 28);
+    g.fillRect(2, 34, 28, 28);
+    g.fillRect(34, 34, 28, 28);
+    g.fillStyle = '#2a3245';
+    g.fillRect(2, 2, 28, 1);
+    g.fillRect(34, 2, 28, 1);
+    g.fillRect(2, 34, 28, 1);
+    g.fillRect(34, 34, 28, 1);
+    // Subtle diamond treads
+    g.fillStyle = '#131720';
+    for (let y = 6; y < s; y += 8) {
+      for (let x = 6; x < s; x += 8) {
+        g.fillRect(x, y, 2, 2);
+      }
+    }
+  });
+
+  // Ceiling: dark ribbed industrial panels with dim recessed lights
+  const TEX_CEIL = makeTextureBuffer((g, s) => {
+    g.fillStyle = '#0e1118';
+    g.fillRect(0, 0, s, s);
+    g.fillStyle = '#171c28';
+    g.fillRect(4, 4, s - 8, s - 8);
+    g.fillStyle = '#0b0d14';
+    g.fillRect(10, 10, s - 20, s - 20);
+    // Recessed ceiling lamp dot
+    g.fillStyle = '#2a3952';
+    g.fillRect(26, 26, 12, 12);
+    g.fillStyle = '#4e77a8';
+    g.fillRect(29, 29, 6, 6);
+  });
+
+  // Sprite generator helper (64x64 RGBA Uint32Array)
+  function makeSprite(drawFn) {
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 64;
+    const g = c.getContext('2d');
+    g.clearRect(0, 0, 64, 64);
+    drawFn(g);
+    const data = g.getImageData(0, 0, 64, 64).data;
+    const buf = new Uint32Array(64 * 64);
+    for (let i = 0; i < buf.length; i++) {
+      const a = data[i * 4 + 3];
+      buf[i] = a > 90 ? packRGBA(data[i * 4], data[i * 4 + 1], data[i * 4 + 2], 255) : 0;
+    }
+    return buf;
+  }
+
+  function drawImpFrame(g, step, flash) {
+    const legShift = step ? 3 : -3;
+    const bodyCol = flash ? '#ffffff' : '#c92a35';
+    const darkCol = flash ? '#ffe0e0' : '#7a141c';
+    const hornCol = flash ? '#ffffff' : '#e8d5b7';
+    // Shadow
+    g.fillStyle = 'rgba(0,0,0,0.45)';
+    g.beginPath(); g.ellipse(32, 60, 15, 4, 0, 0, Math.PI * 2); g.fill();
+    // Legs
+    g.fillStyle = darkCol;
+    g.fillRect(21, 44 + (step ? 2 : 0), 7, 14);
+    g.fillRect(36, 44 + (step ? 0 : 2), 7, 14);
+    // Torso
+    g.fillStyle = bodyCol;
+    g.beginPath(); g.ellipse(32, 35, 13, 14, 0, 0, Math.PI * 2); g.fill();
+    // Rib armor
+    g.fillStyle = darkCol;
+    g.fillRect(25, 31, 14, 3);
+    g.fillRect(26, 37, 12, 3);
+    // Arms & claws
+    g.fillStyle = bodyCol;
+    g.fillRect(11, 27 + legShift, 9, 13);
+    g.fillRect(44, 27 - legShift, 9, 13);
+    g.fillStyle = hornCol;
+    g.fillRect(11, 39 + legShift, 3, 5);
+    g.fillRect(16, 39 + legShift, 3, 5);
+    g.fillRect(45, 39 - legShift, 3, 5);
+    g.fillRect(50, 39 - legShift, 3, 5);
+    // Head
+    g.fillStyle = bodyCol;
+    g.beginPath(); g.arc(32, 18, 10, 0, Math.PI * 2); g.fill();
+    // Horns
+    g.fillStyle = hornCol;
+    g.beginPath(); g.moveTo(23, 14); g.lineTo(14, 4); g.lineTo(26, 9); g.fill();
+    g.beginPath(); g.moveTo(41, 14); g.lineTo(50, 4); g.lineTo(38, 9); g.fill();
+    // Eyes & maw
+    g.fillStyle = '#ffee38';
+    g.fillRect(26, 15, 4, 3);
+    g.fillRect(34, 15, 4, 3);
+    g.fillStyle = '#240508';
+    g.fillRect(27, 21, 10, 4);
+  }
+
+  function drawAcolyteFrame(g, step, flash) {
+    const hover = step ? -2 : 2;
+    const robe = flash ? '#ffffff' : '#5e2ca5';
+    const robeDark = flash ? '#eee0ff' : '#32145e';
+    const glow = flash ? '#ffffff' : '#38ff9c';
+    g.fillStyle = 'rgba(0,0,0,0.4)';
+    g.beginPath(); g.ellipse(32, 60, 14, 4, 0, 0, Math.PI * 2); g.fill();
+    // Flowing cloak
+    g.fillStyle = robe;
+    g.beginPath();
+    g.moveTo(32, 12 + hover);
+    g.lineTo(15, 54 + hover);
+    g.lineTo(49, 54 + hover);
+    g.closePath();
+    g.fill();
+    // Inner shadow
+    g.fillStyle = robeDark;
+    g.beginPath();
+    g.moveTo(32, 22 + hover);
+    g.lineTo(23, 52 + hover);
+    g.lineTo(41, 52 + hover);
+    g.closePath();
+    g.fill();
+    // Hooded head
+    g.fillStyle = '#140826';
+    g.beginPath(); g.arc(32, 18 + hover, 8, 0, Math.PI * 2); g.fill();
+    g.fillStyle = glow;
+    g.fillRect(27, 16 + hover, 3, 3);
+    g.fillRect(34, 16 + hover, 3, 3);
+    // Glowing caster orbs
+    g.fillStyle = glow;
+    g.beginPath(); g.arc(15, 34 + hover, 5, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(49, 34 - hover, 5, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#d4ffea';
+    g.beginPath(); g.arc(15, 34 + hover, 2, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.arc(49, 34 - hover, 2, 0, Math.PI * 2); g.fill();
+    // Chest rune
+    g.fillStyle = glow;
+    g.fillRect(30, 30 + hover, 4, 12);
+    g.fillRect(27, 34 + hover, 10, 3);
+  }
+
+  function drawBruiserFrame(g, step, flash) {
+    const stride = step ? 2 : -2;
+    const armor = flash ? '#ffffff' : '#c77f28';
+    const steel = flash ? '#fff3d6' : '#4a4e5c';
+    const visor = flash ? '#ffffff' : '#ff3838';
+    g.fillStyle = 'rgba(0,0,0,0.5)';
+    g.beginPath(); g.ellipse(32, 60, 20, 5, 0, 0, Math.PI * 2); g.fill();
+    // Heavy legs
+    g.fillStyle = steel;
+    g.fillRect(17, 42 + (step ? 2 : 0), 11, 17);
+    g.fillRect(36, 42 + (step ? 0 : 2), 11, 17);
+    // Massive torso
+    g.fillStyle = armor;
+    g.fillRect(14, 18, 36, 28);
+    g.fillStyle = steel;
+    g.fillRect(20, 23, 24, 17);
+    // Twin shoulder cannons
+    g.fillStyle = '#303440';
+    g.fillRect(5, 22 + stride, 10, 18);
+    g.fillRect(49, 22 - stride, 10, 18);
+    g.fillStyle = '#ff7b1c';
+    g.fillRect(7, 37 + stride, 6, 4);
+    g.fillRect(51, 37 - stride, 6, 4);
+    // Horned cyber helmet
+    g.fillStyle = armor;
+    g.fillRect(22, 8, 20, 14);
+    g.fillStyle = '#e6e8f0';
+    g.fillRect(16, 4, 6, 8);
+    g.fillRect(42, 4, 6, 8);
+    // Red visor
+    g.fillStyle = visor;
+    g.fillRect(24, 13, 16, 4);
+    // Reactor core
+    g.fillStyle = '#ffae2b';
+    g.beginPath(); g.arc(32, 31, 5, 0, Math.PI * 2); g.fill();
+  }
+
+  const SPRITES = {
+    imp0: makeSprite(g => drawImpFrame(g, 0, false)),
+    imp1: makeSprite(g => drawImpFrame(g, 1, false)),
+    impHit: makeSprite(g => drawImpFrame(g, 0, true)),
+    aco0: makeSprite(g => drawAcolyteFrame(g, 0, false)),
+    aco1: makeSprite(g => drawAcolyteFrame(g, 1, false)),
+    acoHit: makeSprite(g => drawAcolyteFrame(g, 0, true)),
+    bru0: makeSprite(g => drawBruiserFrame(g, 0, false)),
+    bru1: makeSprite(g => drawBruiserFrame(g, 1, false)),
+    bruHit: makeSprite(g => drawBruiserFrame(g, 0, true)),
+    health: makeSprite(g => {
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.beginPath(); g.ellipse(32, 58, 14, 4, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#eaf2ff';
+      g.fillRect(16, 26, 32, 26);
+      g.fillStyle = '#8fa4c4';
+      g.fillRect(16, 26, 32, 4);
+      g.fillRect(16, 48, 32, 4);
+      g.fillStyle = '#ff2a4b';
+      g.fillRect(28, 31, 8, 16);
+      g.fillRect(24, 35, 16, 8);
+    }),
+    ammo: makeSprite(g => {
+      g.fillStyle = 'rgba(0,0,0,0.4)';
+      g.beginPath(); g.ellipse(32, 58, 14, 4, 0, 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#2b3648';
+      g.fillRect(15, 28, 34, 24);
+      g.fillStyle = '#536785';
+      g.fillRect(15, 28, 34, 4);
+      g.fillStyle = '#22e3ff';
+      g.fillRect(20, 35, 6, 13);
+      g.fillRect(29, 35, 6, 13);
+      g.fillRect(38, 35, 6, 13);
+    }),
+    core: makeSprite(g => {
+      g.fillStyle = 'rgba(0,0,0,0.45)';
+      g.beginPath(); g.ellipse(32, 58, 16, 4, 0, 0, Math.PI * 2); g.fill();
+      const grd = g.createRadialGradient(28, 32, 3, 32, 36, 18);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.35, '#ffbe3b');
+      grd.addColorStop(0.75, '#ff5e14');
+      grd.addColorStop(1, '#3b1c26');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 36, 17, 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#22e3ff';
+      g.lineWidth = 3;
+      g.beginPath(); g.ellipse(32, 36, 16, 7, 0.35, 0, Math.PI * 2); g.stroke();
+    }),
+    coreHot: makeSprite(g => {
+      const grd = g.createRadialGradient(32, 36, 4, 32, 36, 20);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.45, '#59f4ff');
+      grd.addColorStop(0.8, '#ff7b1c');
+      grd.addColorStop(1, '#ff1f44');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 36, 19, 0, Math.PI * 2); g.fill();
+    }),
+    boltPlayer: makeSprite(g => {
+      const grd = g.createRadialGradient(32, 32, 2, 32, 32, 14);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.45, '#4ef0ff');
+      grd.addColorStop(1, 'rgba(0,140,255,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 32, 14, 0, Math.PI * 2); g.fill();
+    }),
+    boltPortal: makeSprite(g => {
+      const grd = g.createRadialGradient(32, 32, 2, 32, 32, 16);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.45, '#ffd447');
+      grd.addColorStop(0.85, '#ff6a00');
+      grd.addColorStop(1, 'rgba(255,106,0,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 32, 16, 0, Math.PI * 2); g.fill();
+    }),
+    boltEnemyGreen: makeSprite(g => {
+      const grd = g.createRadialGradient(32, 32, 2, 32, 32, 15);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.45, '#38ff9c');
+      grd.addColorStop(1, 'rgba(20,160,80,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 32, 15, 0, Math.PI * 2); g.fill();
+    }),
+    boltEnemyOrange: makeSprite(g => {
+      const grd = g.createRadialGradient(32, 32, 2, 32, 32, 16);
+      grd.addColorStop(0, '#ffffff');
+      grd.addColorStop(0.45, '#ff982b');
+      grd.addColorStop(1, 'rgba(220,40,0,0)');
+      g.fillStyle = grd;
+      g.beginPath(); g.arc(32, 32, 16, 0, Math.PI * 2); g.fill();
+    })
+  };
+
+  /* ==========================================================================
+     3. WEB AUDIO ENGINE: 132 BPM INDUSTRIAL SYNTH-METAL SOUNDTRACK + SFX
+     ========================================================================== */
+  class AudioEngine {
+    constructor() {
+      this.ctx = null;
+      this.master = null;
+      this.musicGain = null;
+      this.sfxGain = null;
+      this.noiseBuf = null;
+      this.muted = false;
+      this.playingMusic = false;
+      this.step = 0;
+      this.nextNoteTime = 0;
+      this.timerId = null;
+      this.tempo = 132;
+    }
+
+    init() {
+      try {
+        if (!this.ctx) {
+          const AC = window.AudioContext || window.webkitAudioContext;
+          if (!AC) return;
+          this.ctx = new AC();
+          this.master = this.ctx.createGain();
+          this.master.gain.value = this.muted ? 0 : 0.72;
+          this.master.connect(this.ctx.destination);
+
+          this.musicGain = this.ctx.createGain();
+          this.musicGain.gain.value = 0.34;
+          this.musicGain.connect(this.master);
+
+          this.sfxGain = this.ctx.createGain();
+          this.sfxGain.gain.value = 0.65;
+          this.sfxGain.connect(this.master);
+
+          // Shared white noise buffer for snare / hi-hat / explosions
+          const len = this.ctx.sampleRate * 0.5;
+          this.noiseBuf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+          const ch = this.noiseBuf.getChannelData(0);
+          for (let i = 0; i < len; i++) ch[i] = Math.random() * 2 - 1;
+        }
+        if (this.ctx.state === 'suspended') {
+          this.ctx.resume().catch(() => {});
+        }
+      } catch (_) {}
+    }
+
+    setMuted(m) {
+      this.muted = m;
+      if (this.master && this.ctx) {
+        this.master.gain.setTargetAtTime(m ? 0 : 0.72, this.ctx.currentTime, 0.02);
+      }
+      updateMuteButtons();
+    }
+
+    toggleMute() {
+      this.init();
+      this.setMuted(!this.muted);
+    }
+
+    startMusic() {
+      this.init();
+      if (!this.ctx) return;
+      if (this.timerId) {
+        clearInterval(this.timerId);
+        this.timerId = null;
+      }
+      this.playingMusic = true;
+      this.step = 0;
+      this.nextNoteTime = this.ctx.currentTime + 0.05;
+      this.timerId = setInterval(() => this.schedule(), 25);
+    }
+
+    stopMusic() {
+      this.playingMusic = false;
+      if (this.timerId) {
+        clearInterval(this.timerId);
+        this.timerId = null;
+      }
+    }
+
+    midiToHz(m) {
+      return 440 * Math.pow(2, (m - 69) / 12);
+    }
+
+    schedule() {
+      if (!this.playingMusic || !this.ctx) return;
+      const stepDur = 60 / this.tempo / 4; // 16th note
+      while (this.nextNoteTime < this.ctx.currentTime + 0.12) {
+        this.playStep(this.step, this.nextNoteTime, stepDur);
+        this.nextNoteTime += stepDur;
+        this.step = (this.step + 1) % 64;
+      }
+    }
+
+    playStep(step, t, dur) {
+      // Classic E-Phrygian industrial Doom-style 64-step bassline
+      const bar = Math.floor(step / 16);
+      const s = step % 16;
+
+      // Bass riff notes (MIDI)
+      const riffA = [28, 28, 40, 28, 38, 28, 36, 28, 35, 28, 34, 35, 28, 28, 33, 35];
+      const riffB = [28, 28, 40, 28, 41, 28, 40, 28, 38, 28, 36, 35, 33, 31, 29, 28];
+      const bassNote = (bar === 3 ? riffB[s] : riffA[s]);
+
+      // Driving bass synth
+      if (s % 2 === 0 || s === 11 || s === 15) {
+        const osc = this.ctx.createOscillator();
+        const sub = this.ctx.createOscillator();
+        const flt = this.ctx.createBiquadFilter();
+        const g = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        sub.type = 'square';
+        const hz = this.midiToHz(bassNote);
+        osc.frequency.setValueAtTime(hz, t);
+        sub.frequency.setValueAtTime(hz * 0.5, t);
+        flt.type = 'lowpass';
+        flt.frequency.setValueAtTime(s === 0 || s === 8 ? 1100 : 680, t);
+        flt.frequency.exponentialRampToValueAtTime(220, t + dur * 1.4);
+        g.gain.setValueAtTime(0.32, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + dur * 1.5);
+        osc.connect(flt);
+        sub.connect(flt);
+        flt.connect(g);
+        g.connect(this.musicGain);
+        osc.start(t); sub.start(t);
+        osc.stop(t + dur * 1.6); sub.stop(t + dur * 1.6);
+      }
+
+      // Lead menacing industrial arp on bars 1, 2, 3
+      if (bar >= 1) {
+        const leadPattern = [64, 0, 67, 0, 65, 64, 0, 62, 64, 0, 71, 0, 69, 67, 65, 64];
+        const note = leadPattern[s];
+        if (note > 0 && (bar !== 1 || s % 2 === 0)) {
+          const osc = this.ctx.createOscillator();
+          const g = this.ctx.createGain();
+          osc.type = 'square';
+          osc.frequency.setValueAtTime(this.midiToHz(note + (bar === 3 ? 0 : -12)), t);
+          g.gain.setValueAtTime(0.11, t);
+          g.gain.exponentialRampToValueAtTime(0.001, t + dur * 1.3);
+          osc.connect(g);
+          g.connect(this.musicGain);
+          osc.start(t);
+          osc.stop(t + dur * 1.35);
+        }
+      }
+
+      // Kick drum
+      if (s === 0 || s === 6 || s === 8 || (bar % 2 === 1 && s === 14)) {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(145, t);
+        osc.frequency.exponentialRampToValueAtTime(38, t + 0.11);
+        g.gain.setValueAtTime(0.62, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+        osc.connect(g);
+        g.connect(this.musicGain);
+        osc.start(t);
+        osc.stop(t + 0.15);
+      }
+
+      // Snare drum
+      if (s === 4 || s === 12) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf;
+        const hp = this.ctx.createBiquadFilter();
+        hp.type = 'bandpass';
+        hp.frequency.value = 1800;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.32, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+        src.connect(hp); hp.connect(g); g.connect(this.musicGain);
+        src.start(t); src.stop(t + 0.13);
+      }
+
+      // Hi-hat
+      if (s % 2 === 0) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf;
+        const hp = this.ctx.createBiquadFilter();
+        hp.type = 'highpass';
+        hp.frequency.value = 7500;
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(s % 4 === 2 ? 0.14 : 0.07, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.04);
+        src.connect(hp); hp.connect(g); g.connect(this.musicGain);
+        src.start(t); src.stop(t + 0.05);
+      }
+    }
+
+    sfxShoot(boosted) {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(boosted ? 620 : 420, t);
+      osc.frequency.exponentialRampToValueAtTime(65, t + 0.12);
+      g.gain.setValueAtTime(0.35, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.13);
+      osc.connect(g); g.connect(this.sfxGain);
+      osc.start(t); osc.stop(t + 0.14);
+
+      if (this.noiseBuf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf;
+        const bp = this.ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 1400;
+        const ng = this.ctx.createGain();
+        ng.gain.setValueAtTime(0.22, t);
+        ng.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+        src.connect(bp); bp.connect(ng); ng.connect(this.sfxGain);
+        src.start(t); src.stop(t + 0.09);
+      }
+    }
+
+    sfxPulse() {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(260, t);
+      osc.frequency.exponentialRampToValueAtTime(42, t + 0.25);
+      g.gain.setValueAtTime(0.55, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.27);
+      osc.connect(g); g.connect(this.sfxGain);
+      osc.start(t); osc.stop(t + 0.28);
+    }
+
+    sfxPortal() {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      for (const base of [260, 390]) {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(base, t);
+        osc.frequency.exponentialRampToValueAtTime(base * 2.4, t + 0.12);
+        osc.frequency.exponentialRampToValueAtTime(base * 0.9, t + 0.26);
+        g.gain.setValueAtTime(0.24, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.27);
+        osc.connect(g); g.connect(this.sfxGain);
+        osc.start(t); osc.stop(t + 0.28);
+      }
+    }
+
+    sfxHit(kill) {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = kill ? 'square' : 'triangle';
+      osc.frequency.setValueAtTime(kill ? 220 : 320, t);
+      osc.frequency.exponentialRampToValueAtTime(kill ? 50 : 120, t + (kill ? 0.18 : 0.07));
+      g.gain.setValueAtTime(kill ? 0.34 : 0.2, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + (kill ? 0.2 : 0.08));
+      osc.connect(g); g.connect(this.sfxGain);
+      osc.start(t); osc.stop(t + (kill ? 0.21 : 0.09));
+    }
+
+    sfxExplosion() {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      if (this.noiseBuf) {
+        const src = this.ctx.createBufferSource();
+        src.buffer = this.noiseBuf;
+        const lp = this.ctx.createBiquadFilter();
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(900, t);
+        lp.frequency.exponentialRampToValueAtTime(110, t + 0.35);
+        const g = this.ctx.createGain();
+        g.gain.setValueAtTime(0.55, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.36);
+        src.connect(lp); lp.connect(g); g.connect(this.sfxGain);
+        src.start(t); src.stop(t + 0.38);
+      }
+    }
+
+    sfxPickup(isHealth) {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      const notes = isHealth ? [523, 659, 784] : [440, 587];
+      notes.forEach((hz, idx) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(hz, t + idx * 0.055);
+        g.gain.setValueAtTime(0.24, t + idx * 0.055);
+        g.gain.exponentialRampToValueAtTime(0.001, t + idx * 0.055 + 0.13);
+        osc.connect(g); g.connect(this.sfxGain);
+        osc.start(t + idx * 0.055);
+        osc.stop(t + idx * 0.055 + 0.14);
+      });
+    }
+
+    sfxHurt() {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      const osc = this.ctx.createOscillator();
+      const g = this.ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(55, t + 0.16);
+      g.gain.setValueAtTime(0.32, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+      osc.connect(g); g.connect(this.sfxGain);
+      osc.start(t); osc.stop(t + 0.19);
+    }
+
+    sfxWin() {
+      if (!this.ctx || this.muted) return;
+      const t = this.ctx.currentTime;
+      [523.25, 659.25, 783.99, 1046.5].forEach((hz, i) => {
+        const osc = this.ctx.createOscillator();
+        const g = this.ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(hz, t + i * 0.09);
+        g.gain.setValueAtTime(0.26, t + i * 0.09);
+        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.09 + 0.45);
+        osc.connect(g); g.connect(this.sfxGain);
+        osc.start(t + i * 0.09);
+        osc.stop(t + i * 0.09 + 0.46);
+      });
+    }
+  }
+
+  const audio = new AudioEngine();
+
+  /* ==========================================================================
+     4. DOM REFERENCES & DISPLAY CANVASES
+     ========================================================================== */
+  const viewCanvas = document.getElementById('view');
+  const viewCtx = viewCanvas.getContext('2d');
+  const miniCanvas = document.getElementById('minimap');
+  const miniCtx = miniCanvas.getContext('2d');
+
+  // Offscreen raycast buffer canvas (fast pixel buffer -> scaled cleanly to full viewport)
+  const renderCanvas = document.createElement('canvas');
+  const renderCtx = renderCanvas.getContext('2d');
+  let RW = 480;
+  let RH = 270;
+  let imgData = null;
+  let pixels32 = null;
+  let zBuf = new Float32Array(RW);
+  let portalFirstDist = new Float32Array(RW);
+  let portalIdBuf = new Uint8Array(RW);
+  let portalTopBuf = new Int16Array(RW);
+  let portalBotBuf = new Int16Array(RW);
+
+  function resizeCanvases() {
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, window.innerWidth);
+    const h = Math.max(1, window.innerHeight);
+    viewCanvas.width = Math.floor(w * dpr);
+    viewCanvas.height = Math.floor(h * dpr);
+    viewCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    RW = w < 640 ? 384 : 480;
+    RH = clamp(Math.round(RW * (h / w)), 216, 360);
+    renderCanvas.width = RW;
+    renderCanvas.height = RH;
+    imgData = renderCtx.createImageData(RW, RH);
+    pixels32 = new Uint32Array(imgData.data.buffer);
+    zBuf = new Float32Array(RW);
+    portalFirstDist = new Float32Array(RW);
+    portalIdBuf = new Uint8Array(RW);
+    portalTopBuf = new Int16Array(RW);
+    portalBotBuf = new Int16Array(RW);
+  }
+  window.addEventListener('resize', resizeCanvases);
+  resizeCanvases();
+
+  const elHud = document.getElementById('hud');
+  const elScreenTitle = document.getElementById('screen-title');
+  const elScreenWin = document.getElementById('screen-win');
+  const elScreenOver = document.getElementById('screen-over');
+  const elPointerHint = document.getElementById('pointer-hint');
+  const elTouchControls = document.getElementById('touch-controls');
+  const elDemoBanner = document.getElementById('demo-banner');
+  const elDemoStateText = document.getElementById('demo-state-text');
+  const elWaveToast = document.getElementById('wave-toast');
+  const elMedalToast = document.getElementById('medal-toast');
+
+  const hudWave = document.getElementById('hud-wave');
+  const hudEnemies = document.getElementById('hud-enemies');
+  const hudPortals = document.getElementById('hud-portals');
+  const hudPhys = document.getElementById('hud-phys');
+  const hudHp = document.getElementById('hud-hp');
+  const hudAmmo = document.getElementById('hud-ammo');
+  const hudPulse = document.getElementById('hud-pulse');
+  const hudSpeed = document.getElementById('hud-speed');
+  const barHp = document.getElementById('bar-hp');
+  const barAmmo = document.getElementById('bar-ammo');
+  const barPulse = document.getElementById('bar-pulse');
+
+  const muteButtons = [
+    document.getElementById('btn-title-mute'),
+    document.getElementById('btn-hud-mute')
+  ];
+  function updateMuteButtons() {
+    const label = audio.muted ? 'AUDIO: OFF' : 'AUDIO: ON';
+    for (const b of muteButtons) {
+      if (b) b.textContent = label;
+    }
+  }
+
+  /* ==========================================================================
+     5. GAME STATE & ENTITIES
+     ========================================================================== */
+  const STATE = {
+    mode: 'title', // 'title' | 'play' | 'demo' | 'win' | 'over'
+    time: 0,
+    runTime: 0,
+    wave: 1,
+    maxWaves: 3,
+    waveDelay: 0,
+    kills: 0,
+    portalsUsed: 0,
+    physicsKills: 0,
+    hurtFlash: 0,
+    portalFlash: 0,
+    portalFlashColor: '#22e3ff',
+    hitMarker: 0,
+    waveToastTimer: 0,
+    medalToastTimer: 0
+  };
+
+  const player = {
+    x: 8.0, y: 8.0,
+    vx: 0, vy: 0,
+    angle: 0,
+    radius: 0.34,
+    hp: 100, maxHp: 100,
+    ammo: 44, maxAmmo: 64,
+    ammoRegenTimer: 0,
+    fireCooldown: 0,
+    pulseCooldown: 0,
+    pulseMaxCooldown: 1.9,
+    portalCooldown: 0,
+    portalBoostTimer: 0,
+    recoil: 0,
+    pulseAnim: 0,
+    bobPhase: 0,
+    bobAmt: 0
+  };
+
+  let enemies = [];
+  let projectiles = [];
+  let pickups = [];
+  let cores = [];
+  let sparks = [];
+
+  // Demo Bot internal state
+  const bot = {
+    state: 'ENGAGING',
+    portalTarget: null,
+    portalCooldown: 1.4,
+    strafeDir: 1,
+    strafeSwitchTimer: 1.8,
+    stuckTimer: 0,
+    lastCheckX: 8,
+    lastCheckY: 8,
+    escapeTimer: 0,
+    escapeAngle: 0,
+    portalsUsedThisWave: 0
+  };
+
+  function showWaveToast(text) {
+    elWaveToast.textContent = text;
+    elWaveToast.classList.add('show');
+    STATE.waveToastTimer = 2.0;
+  }
+
+  function showMedalToast(text) {
+    elMedalToast.textContent = text;
+    elMedalToast.classList.add('show');
+    STATE.medalToastTimer = 1.6;
+  }
+
+  function initPickups() {
+    pickups = [
+      { type: 'health', x: 8.0, y: 2.7, active: true, respawn: 0, amount: 35 },
+      { type: 'health', x: 8.0, y: 13.3, active: true, respawn: 0, amount: 35 },
+      { type: 'ammo', x: 6.2, y: 6.2, active: true, respawn: 0, amount: 22 },
+      { type: 'ammo', x: 9.8, y: 9.8, active: true, respawn: 0, amount: 22 }
+    ];
+  }
+
+  function initCores() {
+    // Two Volatile Kinetic Cores aligned near the portal corridor for portal physics kills
+    cores = [
+      { x: 5.2, y: 8.0, vx: 0, vy: 0, radius: 0.36, portalCooldown: 0, portalCharged: 0, hitByPlayer: 0 },
+      { x: 10.8, y: 8.0, vx: 0, vy: 0, radius: 0.36, portalCooldown: 0, portalCharged: 0, hitByPlayer: 0 }
+    ];
+  }
+
+  function pickSafeSpawn(minDistFromPlayer) {
+    const candidates = [
+      { x: 2.3, y: 2.3 }, { x: 13.7, y: 2.3 },
+      { x: 2.3, y: 13.7 }, { x: 13.7, y: 13.7 },
+      { x: 8.0, y: 1.9 }, { x: 8.0, y: 14.1 },
+      { x: 2.4, y: 6.0 }, { x: 13.6, y: 10.0 },
+      { x: 2.4, y: 10.0 }, { x: 13.6, y: 6.0 },
+      { x: 6.5, y: 2.2 }, { x: 9.5, y: 13.8 }
+    ];
+    // Shuffle
+    for (let i = candidates.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      const tmp = candidates[i]; candidates[i] = candidates[j]; candidates[j] = tmp;
+    }
+    for (const c of candidates) {
+      const dp = Math.hypot(c.x - player.x, c.y - player.y);
+      if (dp < minDistFromPlayer) continue;
+      let crowded = false;
+      for (const e of enemies) {
+        if (Math.hypot(c.x - e.x, c.y - e.y) < 1.4) { crowded = true; break; }
+      }
+      if (!crowded) return c;
+    }
+    return candidates[0];
+  }
+
+  function spawnEnemy(type) {
+    const pos = pickSafeSpawn(5.4);
+    const defs = {
+      imp:     { hp: 66,  speed: 2.55, radius: 0.36, ranged: false, dmg: 9,  shotSpd: 0,   cd: 1.15 },
+      acolyte: { hp: 86,  speed: 2.00, radius: 0.36, ranged: true,  dmg: 9,  shotSpd: 6.5, cd: 2.35 },
+      bruiser: { hp: 130, speed: 2.15, radius: 0.42, ranged: true,  dmg: 11, shotSpd: 7.0, cd: 2.40 }
+    };
+    const d = defs[type];
+    enemies.push({
+      type,
+      x: pos.x, y: pos.y,
+      vx: 0, vy: 0,
+      hp: d.hp, maxHp: d.hp,
+      speed: d.speed,
+      radius: d.radius,
+      ranged: d.ranged,
+      dmg: d.dmg,
+      shotSpd: d.shotSpd,
+      attackCd: 0.9 + Math.random() * 0.8,
+      baseCd: d.cd,
+      meleeWindup: 0,
+      hitFlash: 0,
+      spawnWarp: 0.55,
+      portalCooldown: 0,
+      animPhase: Math.random() * 6.28,
+      knockTimer: 0
+    });
+  }
+
+  function startWave(w) {
+    STATE.wave = w;
+    bot.portalsUsedThisWave = 0;
+    bot.portalCooldown = 1.2;
+    enemies = [];
+    if (w === 1) {
+      spawnEnemy('imp');
+      spawnEnemy('imp');
+      spawnEnemy('acolyte');
+      showWaveToast('WAVE 1 / 3 — ENTER THE ARENA');
+    } else if (w === 2) {
+      spawnEnemy('imp');
+      spawnEnemy('imp');
+      spawnEnemy('imp');
+      spawnEnemy('acolyte');
+      spawnEnemy('acolyte');
+      showWaveToast('WAVE 2 / 3 — ESCALATION');
+    } else {
+      spawnEnemy('imp');
+      spawnEnemy('imp');
+      spawnEnemy('imp');
+      spawnEnemy('acolyte');
+      spawnEnemy('acolyte');
+      spawnEnemy('bruiser');
+      spawnEnemy('bruiser');
+      showWaveToast('WAVE 3 / 3 — FINAL ONSLAUGHT');
+    }
+  }
+
+  function resetRun(mode) {
+    STATE.mode = mode;
+    STATE.runTime = 0;
+    STATE.wave = 1;
+    STATE.waveDelay = 0;
+    STATE.kills = 0;
+    STATE.portalsUsed = 0;
+    STATE.physicsKills = 0;
+    STATE.hurtFlash = 0;
+    STATE.portalFlash = 0;
+    STATE.hitMarker = 0;
+
+    player.x = 8.0;
+    player.y = 8.0;
+    player.vx = 0;
+    player.vy = 0;
+    player.angle = 0;
+    player.hp = player.maxHp;
+    player.ammo = 44;
+    player.ammoRegenTimer = 0;
+    player.fireCooldown = 0;
+    player.pulseCooldown = 0;
+    player.portalCooldown = 0;
+    player.portalBoostTimer = 0;
+    player.recoil = 0;
+    player.pulseAnim = 0;
+
+    projectiles = [];
+    sparks = [];
+    initPickups();
+    initCores();
+
+    bot.state = 'ENGAGING';
+    bot.portalTarget = null;
+    bot.portalCooldown = 1.3;
+    bot.strafeDir = 1;
+    bot.strafeSwitchTimer = 1.6;
+    bot.stuckTimer = 0;
+    bot.lastCheckX = player.x;
+    bot.lastCheckY = player.y;
+    bot.escapeTimer = 0;
+    bot.portalsUsedThisWave = 0;
+
+    elScreenTitle.classList.add('hidden');
+    elScreenWin.classList.add('hidden');
+    elScreenOver.classList.add('hidden');
+    elHud.classList.remove('hidden');
+
+    if (mode === 'demo') {
+      elDemoBanner.classList.add('active');
+      elPointerHint.classList.add('hidden');
+      elTouchControls.classList.remove('active');
+      releasePointerLock();
+    } else {
+      elDemoBanner.classList.remove('active');
+      if (isTouchDevice) {
+        elTouchControls.classList.add('active');
+        elPointerHint.classList.add('hidden');
+      } else {
+        elTouchControls.classList.remove('active');
+        elPointerHint.classList.remove('hidden');
+      }
+    }
+
+    audio.startMusic();
+    startWave(1);
+    updateHud();
+  }
+
+  function goToTitle() {
+    STATE.mode = 'title';
+    releasePointerLock();
+    audio.stopMusic();
+    elHud.classList.add('hidden');
+    elPointerHint.classList.add('hidden');
+    elTouchControls.classList.remove('active');
+    elScreenWin.classList.add('hidden');
+    elScreenOver.classList.add('hidden');
+    elScreenTitle.classList.remove('hidden');
+  }
+
+  function triggerWin() {
+    const wasDemo = STATE.mode === 'demo';
+    STATE.mode = 'win';
+    releasePointerLock();
+    audio.sfxWin();
+    elHud.classList.add('hidden');
+    elPointerHint.classList.add('hidden');
+    elTouchControls.classList.remove('active');
+    elScreenWin.classList.remove('hidden');
+
+    document.getElementById('win-mode-pill').textContent = wasDemo ? 'DEMO BOT PROOF PASSED' : 'PLAYER VICTORY';
+    document.getElementById('win-sub').textContent = wasDemo
+      ? 'Autonomous bot cleared all 3 waves using portals, pickups, and kinetic combat.'
+      : 'All three hostile waves neutralized. You mastered the portal arena.';
+    document.getElementById('win-time').textContent = STATE.runTime.toFixed(1) + 's';
+    document.getElementById('win-portals').textContent = String(STATE.portalsUsed);
+    document.getElementById('win-phys').textContent = String(STATE.physicsKills);
+    document.getElementById('win-hp').textContent = String(Math.ceil(player.hp));
+  }
+
+  function triggerGameOver() {
+    STATE.mode = 'over';
+    releasePointerLock();
+    audio.sfxHurt();
+    elHud.classList.add('hidden');
+    elPointerHint.classList.add('hidden');
+    elTouchControls.classList.remove('active');
+    elScreenOver.classList.remove('hidden');
+
+    document.getElementById('over-wave-pill').textContent = 'FELL ON WAVE ' + STATE.wave;
+    document.getElementById('over-wave').textContent = STATE.wave + ' / ' + STATE.maxWaves;
+    document.getElementById('over-kills').textContent = String(STATE.kills);
+    document.getElementById('over-portals').textContent = String(STATE.portalsUsed);
+    document.getElementById('over-phys').textContent = String(STATE.physicsKills);
+  }
+
+  /* ==========================================================================
+     6. INPUT HANDLING (WASD + Mouse PointerLock + Fallback Drag + Touch)
+     ========================================================================== */
+  const keys = Object.create(null);
+  let mouseDown = false;
+  let draggingLook = false;
+  let lastMouseX = 0;
+  let isTouchDevice = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+
+  const touchState = {
+    stickId: null,
+    stickX: 0,
+    stickY: 0,
+    lookId: null,
+    lastLookX: 0,
+    firing: false
+  };
+
+  function requestPointerLockSafe() {
+    if (STATE.mode !== 'play' || isTouchDevice) return;
+    try {
+      if (viewCanvas.requestPointerLock) {
+        const p = viewCanvas.requestPointerLock();
+        if (p && typeof p.catch === 'function') p.catch(() => {});
+      }
+    } catch (_) {}
+  }
+
+  function releasePointerLock() {
+    try {
+      if (document.pointerLockElement && document.exitPointerLock) {
+        document.exitPointerLock();
+      }
+    } catch (_) {}
+  }
+
+  document.addEventListener('pointerlockchange', () => {
+    const locked = document.pointerLockElement === viewCanvas;
+    if (STATE.mode === 'play' && !isTouchDevice) {
+      elPointerHint.classList.toggle('hidden', locked);
+    }
+  });
+
+  window.addEventListener('keydown', (e) => {
+    const k = e.code;
+    keys[k] = true;
+    if (k === 'KeyM') {
+      audio.toggleMute();
+    }
+    if (STATE.mode === 'play') {
+      if (k === 'KeyE' || k === 'ShiftLeft' || k === 'ShiftRight') {
+        fireGravPulse();
+      }
+      if (k === 'Space') {
+        e.preventDefault();
+        firePlayerWeapon();
+      }
+    }
+  });
+
+  window.addEventListener('keyup', (e) => {
+    keys[e.code] = false;
+  });
+
+  viewCanvas.addEventListener('mousedown', (e) => {
+    if (STATE.mode !== 'play') return;
+    audio.init();
+    if (e.button === 0) {
+      mouseDown = true;
+      if (document.pointerLockElement !== viewCanvas && !isTouchDevice) {
+        requestPointerLockSafe();
+        draggingLook = true;
+        lastMouseX = e.clientX;
+      }
+      firePlayerWeapon();
+    } else if (e.button === 2) {
+      fireGravPulse();
+    }
+  });
+
+  window.addEventListener('mouseup', (e) => {
+    if (e.button === 0) {
+      mouseDown = false;
+      draggingLook = false;
+    }
+  });
+
+  viewCanvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  window.addEventListener('mousemove', (e) => {
+    if (STATE.mode !== 'play') return;
+    if (document.pointerLockElement === viewCanvas) {
+      player.angle = wrapAngle(player.angle + e.movementX * 0.0024);
+    } else if (draggingLook) {
+      const dx = e.clientX - lastMouseX;
+      lastMouseX = e.clientX;
+      player.angle = wrapAngle(player.angle + dx * 0.005);
+    }
+  });
+
+  // Mobile touch bindings
+  const stickZone = document.getElementById('stick-zone');
+  const stickKnob = document.getElementById('stick-knob');
+  const lookZone = document.getElementById('look-zone');
+  const touchFireBtn = document.getElementById('touch-fire');
+  const touchPulseBtn = document.getElementById('touch-pulse');
+
+  window.addEventListener('touchstart', () => {
+    if (!isTouchDevice) {
+      isTouchDevice = true;
+      if (STATE.mode === 'play') {
+        elTouchControls.classList.add('active');
+        elPointerHint.classList.add('hidden');
+      }
+    }
+  }, { passive: true });
+
+  function updateStickFromTouch(t) {
+    const rect = stickZone.getBoundingClientRect();
+    const cx = rect.left + rect.width * 0.5;
+    const cy = rect.top + rect.height * 0.5;
+    const maxR = rect.width * 0.38;
+    let dx = t.clientX - cx;
+    let dy = t.clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxR) {
+      dx = (dx / dist) * maxR;
+      dy = (dy / dist) * maxR;
+    }
+    touchState.stickX = dx / maxR;
+    touchState.stickY = dy / maxR;
+    stickKnob.style.transform = `translate(${dx}px, ${dy}px)`;
+  }
+
+  stickZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    touchState.stickId = t.identifier;
+    updateStickFromTouch(t);
+  }, { passive: false });
+
+  stickZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchState.stickId) updateStickFromTouch(t);
+    }
+  }, { passive: false });
+
+  function resetStick(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchState.stickId) {
+        touchState.stickId = null;
+        touchState.stickX = 0;
+        touchState.stickY = 0;
+        stickKnob.style.transform = 'translate(0px, 0px)';
+      }
+    }
+  }
+  stickZone.addEventListener('touchend', resetStick);
+  stickZone.addEventListener('touchcancel', resetStick);
+
+  lookZone.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    const t = e.changedTouches[0];
+    touchState.lookId = t.identifier;
+    touchState.lastLookX = t.clientX;
+  }, { passive: false });
+
+  lookZone.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchState.lookId && STATE.mode === 'play') {
+        const dx = t.clientX - touchState.lastLookX;
+        touchState.lastLookX = t.clientX;
+        player.angle = wrapAngle(player.angle + dx * 0.0068);
+      }
+    }
+  }, { passive: false });
+
+  function resetLook(e) {
+    for (const t of e.changedTouches) {
+      if (t.identifier === touchState.lookId) touchState.lookId = null;
+    }
+  }
+  lookZone.addEventListener('touchend', resetLook);
+  lookZone.addEventListener('touchcancel', resetLook);
+
+  touchFireBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    audio.init();
+    touchState.firing = true;
+    if (STATE.mode === 'play') firePlayerWeapon();
+  }, { passive: false });
+  touchFireBtn.addEventListener('touchend', () => { touchState.firing = false; });
+  touchFireBtn.addEventListener('touchcancel', () => { touchState.firing = false; });
+
+  touchPulseBtn.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    audio.init();
+    if (STATE.mode === 'play') fireGravPulse();
+  }, { passive: false });
+
+  // UI Button wiring (zero dead buttons)
+  document.getElementById('btn-start').addEventListener('click', () => { audio.init(); resetRun('play'); });
+  document.getElementById('btn-demo').addEventListener('click', () => { audio.init(); resetRun('demo'); });
+  document.getElementById('btn-title-mute').addEventListener('click', () => audio.toggleMute());
+  document.getElementById('btn-hud-mute').addEventListener('click', () => audio.toggleMute());
+  document.getElementById('btn-hud-menu').addEventListener('click', goToTitle);
+  document.getElementById('btn-demo-stop').addEventListener('click', goToTitle);
+  document.getElementById('btn-win-restart').addEventListener('click', () => { audio.init(); resetRun('play'); });
+  document.getElementById('btn-win-demo').addEventListener('click', () => { audio.init(); resetRun('demo'); });
+  document.getElementById('btn-win-title').addEventListener('click', goToTitle);
+  document.getElementById('btn-over-retry').addEventListener('click', () => { audio.init(); resetRun('play'); });
+  document.getElementById('btn-over-demo').addEventListener('click', () => { audio.init(); resetRun('demo'); });
+  document.getElementById('btn-over-title').addEventListener('click', goToTitle);
+
+  /* ==========================================================================
+     7. COLLISION, LINE-OF-SIGHT & SEAMLESS PORTAL PHYSICS
+     ========================================================================== */
+  function inPortalOpeningY(y, pad) {
+    return y >= PORTAL_A.yMin + pad && y <= PORTAL_A.yMax - pad;
+  }
+
+  // Smooth collision solver with portal-mouth cutouts so entities never snag entering portals
+  function resolveWorldCollisions(ent, bounce) {
+    const r = ent.radius;
+    let wallHitSpeed = 0;
+
+    // Outer walls (leave portal openings clear so entity smoothly crosses the portal plane!)
+    const allowPortalY = inPortalOpeningY(ent.y, r * 0.45);
+
+    if (!allowPortalY) {
+      if (ent.x < 1.0 + r) {
+        wallHitSpeed = Math.max(wallHitSpeed, Math.abs(ent.vx));
+        ent.x = 1.0 + r;
+        ent.vx = bounce ? -ent.vx * bounce : 0;
+      } else if (ent.x > 15.0 - r) {
+        wallHitSpeed = Math.max(wallHitSpeed, Math.abs(ent.vx));
+        ent.x = 15.0 - r;
+        ent.vx = bounce ? -ent.vx * bounce : 0;
+      }
+    } else {
+      // Prevent clipping top/bottom portal doorframe jambs when deep inside the portal mouth
+      if (ent.x < 1.0 + r || ent.x > 15.0 - r) {
+        if (ent.y < PORTAL_A.yMin + r * 0.5) { ent.y = PORTAL_A.yMin + r * 0.5; ent.vy = Math.max(0, ent.vy); }
+        if (ent.y > PORTAL_A.yMax - r * 0.5) { ent.y = PORTAL_A.yMax - r * 0.5; ent.vy = Math.min(0, ent.vy); }
+      }
+    }
+
+    if (ent.y < 1.0 + r) {
+      wallHitSpeed = Math.max(wallHitSpeed, Math.abs(ent.vy));
+      ent.y = 1.0 + r;
+      ent.vy = bounce ? -ent.vy * bounce : 0;
+    } else if (ent.y > 15.0 - r) {
+      wallHitSpeed = Math.max(wallHitSpeed, Math.abs(ent.vy));
+      ent.y = 15.0 - r;
+      ent.vy = bounce ? -ent.vy * bounce : 0;
+    }
+
+    // 4 interior pillars (circle-vs-AABB)
+    for (const p of PILLARS) {
+      const minX = p.gx, maxX = p.gx + 1;
+      const minY = p.gy, maxY = p.gy + 1;
+      const closestX = clamp(ent.x, minX, maxX);
+      const closestY = clamp(ent.y, minY, maxY);
+      const dx = ent.x - closestX;
+      const dy = ent.y - closestY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < r * r) {
+        const dist = Math.sqrt(distSq);
+        let nx = 0, ny = 0;
+        if (dist > 0.0001) {
+          nx = dx / dist;
+          ny = dy / dist;
+        } else {
+          // Inside pillar fallback: push along nearest face
+          const ox = Math.min(ent.x - minX, maxX - ent.x);
+          const oy = Math.min(ent.y - minY, maxY - ent.y);
+          if (ox < oy) nx = ent.x < p.cx ? -1 : 1;
+          else ny = ent.y < p.cy ? -1 : 1;
+        }
+        const pen = r - dist;
+        ent.x += nx * pen;
+        ent.y += ny * pen;
+        const vn = ent.vx * nx + ent.vy * ny;
+        if (vn < 0) {
+          wallHitSpeed = Math.max(wallHitSpeed, -vn);
+          const rest = bounce ? (1 + bounce) : 1;
+          ent.vx -= rest * vn * nx;
+          ent.vy -= rest * vn * ny;
+        }
+      }
+    }
+
+    return wallHitSpeed;
+  }
+
+  // Unified portal crossing for player, enemies, projectiles, and kinetic cores
+  function checkPortalCrossing(ent, isPlayer, isProjectile, isCore) {
+    if (ent.portalCooldown > 0) return false;
+    const pad = isProjectile ? 0.05 : 0.14;
+    if (!inPortalOpeningY(ent.y, pad)) return false;
+
+    const triggerOffset = isProjectile ? 0.06 : 0.16;
+    const exitOffset = isProjectile ? 0.12 : 0.28;
+
+    let inP = null;
+    if (ent.x <= PORTAL_A.x + triggerOffset && ent.vx < -0.05) {
+      inP = PORTAL_A;
+    } else if (ent.x >= PORTAL_B.x - triggerOffset && ent.vx > 0.05) {
+      inP = PORTAL_B;
+    }
+    if (!inP) return false;
+
+    const outP = inP.link;
+    const res = transformPointAndVec(ent.x, ent.y, ent.vx, ent.vy, inP, outP, exitOffset);
+    ent.x = res.x;
+    ent.y = clamp(res.y, outP.yMin + 0.18, outP.yMax - 0.18);
+    ent.vx = res.vx;
+    ent.vy = res.vy;
+
+    // Preserve speed and add subtle kinetic portal sling on fast crossings
+    const spd = Math.hypot(ent.vx, ent.vy);
+    if (isPlayer) {
+      ent.angle = wrapAngle(ent.angle + res.dTheta);
+      const boost = spd > 3.2 ? Math.min(1.28, 9.8 / Math.max(spd, 0.1)) : 1.05;
+      ent.vx *= boost;
+      ent.vy *= boost;
+      ent.portalCooldown = 0.14;
+      ent.portalBoostTimer = 2.4;
+      STATE.portalsUsed++;
+      bot.portalsUsedThisWave++;
+      STATE.portalFlash = 0.45;
+      STATE.portalFlashColor = outP.color;
+      audio.sfxPortal();
+      if (spd > 4.2) showMedalToast('PORTAL MOMENTUM!');
+    } else if (isCore) {
+      const boost = Math.min(1.35, 16.0 / Math.max(spd, 0.1));
+      ent.vx *= boost;
+      ent.vy *= boost;
+      ent.portalCooldown = 0.12;
+      ent.portalCharged = 3.2;
+      audio.sfxPortal();
+    } else if (isProjectile) {
+      ent.portalCooldown = 0.06;
+      ent.portalCrossed = true;
+      ent.life = Math.min(ent.life + 0.5, 2.5);
+    } else {
+      ent.portalCooldown = 0.18;
+      ent.knockTimer = Math.max(ent.knockTimer || 0, 0.25);
+    }
+    return true;
+  }
+
+  function hasLineOfSight(x0, y0, x1, y1) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const dist = Math.hypot(dx, dy);
+    if (dist < 0.05) return true;
+    const steps = Math.ceil(dist * 7);
+    const sx = dx / steps;
+    const sy = dy / steps;
+    let cx = x0, cy = y0;
+    for (let i = 1; i < steps; i++) {
+      cx += sx;
+      cy += sy;
+      const gx = Math.floor(cx);
+      const gy = Math.floor(cy);
+      if (isSolidCell(gx, gy)) return false;
+    }
+    return true;
+  }
+
+  /* ==========================================================================
+     8. WEAPONS, COMBAT & PHYSICS KILLS
+     ========================================================================== */
+  function spawnSparks(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+      const a = Math.random() * Math.PI * 2;
+      const spd = 1.5 + Math.random() * 4.5;
+      sparks.push({
+        x, y,
+        vx: Math.cos(a) * spd,
+        vy: Math.sin(a) * spd,
+        life: 0.22 + Math.random() * 0.22,
+        maxLife: 0.44,
+        color
+      });
+    }
+  }
+
+  function firePlayerWeapon() {
+    if (player.fireCooldown > 0) return;
+    if (player.ammo <= 0) return;
+    player.ammo--;
+    player.fireCooldown = 0.24;
+    player.recoil = 1.0;
+
+    const boosted = player.portalBoostTimer > 0;
+    const dx = Math.cos(player.angle);
+    const dy = Math.sin(player.angle);
+    const spd = boosted ? 25.0 : 22.0;
+
+    projectiles.push({
+      owner: 'player',
+      x: player.x + dx * 0.42,
+      y: player.y + dy * 0.42,
+      vx: dx * spd,
+      vy: dy * spd,
+      dmg: boosted ? 48 : 36,
+      knock: boosted ? 8.6 : 6.6,
+      radius: 0.24,
+      life: 1.7,
+      portalCooldown: 0,
+      portalCrossed: boosted,
+      color: boosted ? '#ffd447' : '#22e3ff'
+    });
+    audio.sfxShoot(boosted);
+  }
+
+  function fireGravPulse() {
+    if (player.pulseCooldown > 0) return;
+    player.pulseCooldown = player.pulseMaxCooldown;
+    player.pulseAnim = 1.0;
+    audio.sfxPulse();
+
+    const fx = Math.cos(player.angle);
+    const fy = Math.sin(player.angle);
+    const range = 4.6;
+
+    // Blast enemies in front cone
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      const dx = e.x - player.x;
+      const dy = e.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < range && dist > 0.01) {
+        const dot = (dx * fx + dy * fy) / dist;
+        if (dot > 0.25 || dist < 1.6) {
+          const nx = dx / dist, ny = dy / dist;
+          e.vx += nx * 13.5;
+          e.vy += ny * 13.5;
+          e.knockTimer = 0.55;
+          damageEnemy(e, 22, false, 'GRAV-PULSE');
+        }
+      }
+    }
+
+    // Launch Kinetic Cores violently!
+    for (const c of cores) {
+      const dx = c.x - player.x;
+      const dy = c.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < range + 1.0 && dist > 0.01) {
+        const dot = (dx * fx + dy * fy) / dist;
+        if (dot > 0.2 || dist < 1.8) {
+          const nx = dx / dist, ny = dy / dist;
+          c.vx = nx * 15.5;
+          c.vy = ny * 15.5;
+          c.hitByPlayer = 4.0;
+          spawnSparks(c.x, c.y, '#22e3ff', 10);
+        }
+      }
+    }
+
+    // Deflect nearby enemy projectiles!
+    for (const p of projectiles) {
+      if (p.owner !== 'enemy') continue;
+      const dx = p.x - player.x;
+      const dy = p.y - player.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < range) {
+        p.owner = 'player';
+        p.vx = -p.vx * 1.8;
+        p.vy = -p.vy * 1.8;
+        p.dmg = 55;
+        p.knock = 9.0;
+        p.portalCrossed = true;
+        showMedalToast('REFLECTED!');
+      }
+    }
+  }
+
+  function damageEnemy(e, dmg, isPhysics, medalLabel) {
+    e.hp -= dmg;
+    e.hitFlash = 0.14;
+    STATE.hitMarker = 0.16;
+    spawnSparks(e.x, e.y, isPhysics ? '#ffd447' : '#ff5268', isPhysics ? 14 : 7);
+    if (e.hp <= 0) {
+      STATE.kills++;
+      if (isPhysics) {
+        STATE.physicsKills++;
+        if (medalLabel) showMedalToast(medalLabel);
+        audio.sfxExplosion();
+      } else {
+        audio.sfxHit(true);
+      }
+      const idx = enemies.indexOf(e);
+      if (idx !== -1) enemies.splice(idx, 1);
+      return true;
+    } else {
+      audio.sfxHit(false);
+      return false;
+    }
+  }
+
+  function damagePlayer(dmg) {
+    if (STATE.mode !== 'play' && STATE.mode !== 'demo') return;
+    player.hp = Math.max(0, player.hp - dmg);
+    STATE.hurtFlash = 0.42;
+    audio.sfxHurt();
+    if (player.hp <= 0) {
+      triggerGameOver();
+    }
+  }
+
+  /* ==========================================================================
+     9. SMART AUTONOMOUS DEMO BOT (GUARANTEED 3-WAVE VICTORY + PORTAL PROOF)
+     ========================================================================== */
+  function steerClearestDirection(px, py, desiredAngle) {
+    // Test 7 candidate angles around desiredAngle to glide effortlessly around pillars & walls
+    const offsets = [0, 0.42, -0.42, 0.88, -0.88, 1.35, -1.35];
+    let bestAngle = desiredAngle;
+    let bestScore = -1e9;
+    const probeDist = 1.45;
+    for (const off of offsets) {
+      const a = desiredAngle + off;
+      const cos = Math.cos(a), sin = Math.sin(a);
+      let blocked = false;
+      for (const d of [0.55, 1.0, probeDist]) {
+        const tx = px + cos * d;
+        const ty = py + sin * d;
+        // Allow entering portal openings cleanly
+        const inPortal = inPortalOpeningY(ty, 0.22) && (tx < 1.1 || tx > 14.9);
+        if (!inPortal && (tx < 1.35 || tx > 14.65 || ty < 1.35 || ty > 14.65)) {
+          blocked = true; break;
+        }
+        for (const p of PILLARS) {
+          if (tx > p.gx - 0.48 && tx < p.gx + 1.48 && ty > p.gy - 0.48 && ty < p.gy + 1.48) {
+            blocked = true; break;
+          }
+        }
+        if (blocked) break;
+      }
+      const score = (blocked ? -10 : 0) - Math.abs(off) * 1.4;
+      if (score > bestScore) {
+        bestScore = score;
+        bestAngle = a;
+      }
+    }
+    return bestAngle;
+  }
+
+  function updateDemoBot(dt) {
+    bot.portalCooldown = Math.max(0, bot.portalCooldown - dt);
+    bot.strafeSwitchTimer -= dt;
+    if (bot.strafeSwitchTimer <= 0) {
+      bot.strafeDir *= -1;
+      bot.strafeSwitchTimer = 1.5 + Math.random() * 1.2;
+    }
+
+    // Anti-stuck watchdog
+    bot.stuckTimer += dt;
+    if (bot.stuckTimer >= 0.55) {
+      const moved = Math.hypot(player.x - bot.lastCheckX, player.y - bot.lastCheckY);
+      bot.lastCheckX = player.x;
+      bot.lastCheckY = player.y;
+      bot.stuckTimer = 0;
+      if (moved < 0.25 && enemies.length > 0) {
+        bot.escapeTimer = 0.45;
+        bot.escapeAngle = Math.atan2(8.0 - player.y, 8.0 - player.x) + (Math.random() - 0.5) * 0.9;
+      }
+    }
+    if (bot.escapeTimer > 0) bot.escapeTimer -= dt;
+
+    // 1. Analyze nearest threat & visible enemies
+    let nearestEnemy = null;
+    let nearestDist = Infinity;
+    let bestTarget = null;
+    let bestTargetScore = -1e9;
+
+    for (const e of enemies) {
+      const d = Math.hypot(e.x - player.x, e.y - player.y);
+      if (d < nearestDist) {
+        nearestDist = d;
+        nearestEnemy = e;
+      }
+      const los = hasLineOfSight(player.x, player.y, e.x, e.y);
+      // Score prefers visible, close, and ranged enemies
+      const score = (los ? 40 : 0) - d * 2.2 + (e.ranged ? 4 : 0) + (e.hp < 40 ? 6 : 0);
+      if (score > bestTargetScore) {
+        bestTargetScore = score;
+        bestTarget = e;
+      }
+    }
+
+    // 2. Choose movement goal (Health -> Portal Flank -> Ammo -> Tactical Kiting)
+    let moveX = 0, moveY = 0;
+    let doingPortalRun = false;
+
+    // Check urgent health pickup
+    let targetPickup = null;
+    if (player.hp < 74) {
+      let bestD = Infinity;
+      for (const pk of pickups) {
+        if (pk.active && pk.type === 'health') {
+          const d = Math.hypot(pk.x - player.x, pk.y - player.y);
+          if (d < bestD) { bestD = d; targetPickup = pk; }
+        }
+      }
+    }
+
+    // Check ammo pickup
+    if (!targetPickup && player.ammo < 20) {
+      let bestD = Infinity;
+      for (const pk of pickups) {
+        if (pk.active && pk.type === 'ammo') {
+          const d = Math.hypot(pk.x - player.x, pk.y - player.y);
+          if (d < bestD) { bestD = d; targetPickup = pk; }
+        }
+      }
+    }
+
+    // Schedule intentional portal use (guaranteed in Wave 1 and used tactically in every wave!)
+    const needMandatoryPortal = (STATE.portalsUsed === 0 && STATE.runTime > 1.4);
+    const tacticalPortal = (bot.portalCooldown <= 0 && (nearestDist < 4.0 || bot.portalsUsedThisWave === 0));
+
+    if (!bot.portalTarget && !targetPickup && (needMandatoryPortal || tacticalPortal) && enemies.length > 0) {
+      const dA = Math.hypot(PORTAL_A.x - player.x, PORTAL_A.y - player.y);
+      const dB = Math.hypot(PORTAL_B.x - player.x, PORTAL_B.y - player.y);
+      bot.portalTarget = dA <= dB ? PORTAL_A : PORTAL_B;
+    }
+
+    // Clear portal target right after crossing
+    if (bot.portalTarget && player.portalBoostTimer > 2.1) {
+      bot.portalTarget = null;
+      bot.portalCooldown = 7.5;
+    }
+
+    if (bot.escapeTimer > 0) {
+      bot.state = 'REPOSITION';
+      moveX = Math.cos(bot.escapeAngle);
+      moveY = Math.sin(bot.escapeAngle);
+    } else if (targetPickup) {
+      bot.state = targetPickup.type === 'health' ? 'SEEK HEALTH' : 'SEEK AMMO';
+      const rawA = Math.atan2(targetPickup.y - player.y, targetPickup.x - player.x);
+      const safeA = steerClearestDirection(player.x, player.y, rawA);
+      moveX = Math.cos(safeA);
+      moveY = Math.sin(safeA);
+    } else if (bot.portalTarget) {
+      doingPortalRun = true;
+      bot.state = 'PORTAL FLANK';
+      const p = bot.portalTarget;
+      // First align with the open lane in front of the portal, then sprint straight through!
+      const alignedY = Math.abs(player.y - p.y) < 0.55;
+      const wpX = alignedY ? (p.id === 1 ? 0.4 : 15.6) : (p.id === 1 ? 2.4 : 13.6);
+      const wpY = p.y;
+      const rawA = Math.atan2(wpY - player.y, wpX - player.x);
+      const safeA = alignedY ? rawA : steerClearestDirection(player.x, player.y, rawA);
+      moveX = Math.cos(safeA);
+      moveY = Math.sin(safeA);
+    } else if (nearestEnemy) {
+      bot.state = 'KITE & FIRE';
+      const toEnemyX = nearestEnemy.x - player.x;
+      const toEnemyY = nearestEnemy.y - player.y;
+      const angleToEnemy = Math.atan2(toEnemyY, toEnemyX);
+
+      let desiredAngle;
+      if (nearestDist < 5.0) {
+        // Back away + strafe
+        desiredAngle = angleToEnemy + Math.PI + bot.strafeDir * 0.52;
+      } else if (nearestDist > 8.6 || !hasLineOfSight(player.x, player.y, nearestEnemy.x, nearestEnemy.y)) {
+        // Close angle smoothly to establish sightline
+        desiredAngle = angleToEnemy + bot.strafeDir * 0.65;
+      } else {
+        // Circle-strafe at optimal range
+        desiredAngle = angleToEnemy + bot.strafeDir * 1.48;
+      }
+      // Bias slightly toward open ring around arena center
+      const toCenterAngle = Math.atan2(8.0 - player.y, 8.0 - player.x);
+      const distCenter = Math.hypot(player.x - 8.0, player.y - 8.0);
+      let vx = Math.cos(desiredAngle);
+      let vy = Math.sin(desiredAngle);
+      if (distCenter > 5.4) {
+        vx += Math.cos(toCenterAngle) * 0.65;
+        vy += Math.sin(toCenterAngle) * 0.65;
+      }
+      const safeA = steerClearestDirection(player.x, player.y, Math.atan2(vy, vx));
+      moveX = Math.cos(safeA);
+      moveY = Math.sin(safeA);
+    } else {
+      bot.state = 'AWAITING WAVE';
+      const rawA = Math.atan2(8.0 - player.y, 8.0 - player.x);
+      if (Math.hypot(8.0 - player.x, 8.0 - player.y) > 1.2) {
+        moveX = Math.cos(rawA);
+        moveY = Math.sin(rawA);
+      }
+    }
+
+    // 3. Active Enemy Projectile Evasion!
+    for (const pr of projectiles) {
+      if (pr.owner !== 'enemy') continue;
+      const rx = player.x - pr.x;
+      const ry = player.y - pr.y;
+      const dist = Math.hypot(rx, ry);
+      if (dist < 5.5 && dist > 0.05) {
+        const pSpd = Math.hypot(pr.vx, pr.vy);
+        if (pSpd > 0.1) {
+          const pdx = pr.vx / pSpd, pdy = pr.vy / pSpd;
+          const projAlong = rx * pdx + ry * pdy;
+          if (projAlong > 0) {
+            const perp = rx * (-pdy) + ry * pdx;
+            if (Math.abs(perp) < 1.35) {
+              const side = perp >= 0 ? 1 : -1;
+              moveX += (-pdy) * side * 2.4;
+              moveY += (pdx) * side * 2.4;
+              bot.state = 'DODGING';
+            }
+          }
+        }
+      }
+    }
+
+    // Apply movement vector
+    const mLen = Math.hypot(moveX, moveY);
+    const botSpeed = doingPortalRun ? 6.4 : 6.0;
+    if (mLen > 0.01) {
+      const targetVx = (moveX / mLen) * botSpeed;
+      const targetVy = (moveY / mLen) * botSpeed;
+      player.vx += (targetVx - player.vx) * Math.min(1, dt * 11);
+      player.vy += (targetVy - player.vy) * Math.min(1, dt * 11);
+    } else {
+      player.vx *= Math.pow(0.05, dt);
+      player.vy *= Math.pow(0.05, dt);
+    }
+
+    // 4. Predictive Aiming, Kinetic Core Bowling & Firing
+    let aimX = null, aimY = null;
+    let shouldFire = false;
+
+    // Opportunity check: can we bowl a Kinetic Core straight into an enemy?
+    if (bestTarget && hasLineOfSight(player.x, player.y, bestTarget.x, bestTarget.y)) {
+      for (const c of cores) {
+        const dc = Math.hypot(c.x - player.x, c.y - player.y);
+        const de = Math.hypot(bestTarget.x - c.x, bestTarget.y - c.y);
+        if (dc > 1.0 && dc < 6.5 && de < 6.5 && hasLineOfSight(player.x, player.y, c.x, c.y)) {
+          const u1x = (c.x - player.x) / dc, u1y = (c.y - player.y) / dc;
+          const u2x = (bestTarget.x - c.x) / Math.max(de, 0.1), u2y = (bestTarget.y - c.y) / Math.max(de, 0.1);
+          if (u1x * u2x + u1y * u2y > 0.88) {
+            aimX = c.x; aimY = c.y;
+            shouldFire = true;
+            break;
+          }
+        }
+      }
+    }
+
+    if (aimX === null && bestTarget) {
+      const dist = Math.hypot(bestTarget.x - player.x, bestTarget.y - player.y);
+      const lead = clamp(dist / 22.0, 0, 0.32);
+      aimX = bestTarget.x + bestTarget.vx * lead * 0.6;
+      aimY = bestTarget.y + bestTarget.vy * lead * 0.6;
+      shouldFire = hasLineOfSight(player.x, player.y, bestTarget.x, bestTarget.y);
+    } else if (aimX === null && doingPortalRun && bot.portalTarget) {
+      aimX = bot.portalTarget.x;
+      aimY = bot.portalTarget.y;
+    }
+
+    if (aimX !== null) {
+      const targetAngle = Math.atan2(aimY - player.y, aimX - player.x);
+      const diff = wrapAngle(targetAngle - player.angle);
+      const maxTurn = 10.5 * dt;
+      player.angle = wrapAngle(player.angle + clamp(diff, -maxTurn, maxTurn));
+
+      if (shouldFire && Math.abs(diff) < 0.14) {
+        firePlayerWeapon();
+      }
+      // Use Grav-Pulse whenever an enemy closes within 3.6 units
+      if (nearestEnemy && nearestDist < 3.6 && Math.abs(diff) < 0.7 && player.pulseCooldown <= 0) {
+        fireGravPulse();
+      }
+    }
+
+    elDemoStateText.textContent = 'DEMO BOT ACTIVE — ' + bot.state;
+  }
+
+  /* ==========================================================================
+     10. MAIN SIMULATION UPDATE
+     ========================================================================== */
+  function updatePlayerManual(dt) {
+    let fwd = 0, strafe = 0;
+    if (keys['KeyW'] || keys['ArrowUp']) fwd += 1;
+    if (keys['KeyS'] || keys['ArrowDown']) fwd -= 1;
+    if (keys['KeyD']) strafe += 1;
+    if (keys['KeyA']) strafe -= 1;
+    if (keys['ArrowLeft']) player.angle = wrapAngle(player.angle - 2.5 * dt);
+    if (keys['ArrowRight']) player.angle = wrapAngle(player.angle + 2.5 * dt);
+
+    if (Math.abs(touchState.stickX) > 0.08 || Math.abs(touchState.stickY) > 0.08) {
+      strafe += touchState.stickX;
+      fwd -= touchState.stickY;
+    }
+
+    const fx = Math.cos(player.angle), fy = Math.sin(player.angle);
+    const rx = -fy, ry = fx;
+
+    let wishX = fx * fwd + rx * strafe;
+    let wishY = fy * fwd + ry * strafe;
+    const wLen = Math.hypot(wishX, wishY);
+    const maxSpeed = 6.0;
+
+    if (wLen > 0.01) {
+      wishX = (wishX / wLen) * maxSpeed;
+      wishY = (wishY / wLen) * maxSpeed;
+      // Preserve excess portal-momentum speed smoothly while still giving crisp control
+      const accel = player.portalBoostTimer > 1.8 ? 4.5 : 13.0;
+      player.vx += (wishX - player.vx) * Math.min(1, dt * accel);
+      player.vy += (wishY - player.vy) * Math.min(1, dt * accel);
+    } else {
+      const drag = player.portalBoostTimer > 1.8 ? 0.18 : 0.004;
+      player.vx *= Math.pow(drag, dt);
+      player.vy *= Math.pow(drag, dt);
+    }
+
+    if (mouseDown || touchState.firing || keys['Space']) {
+      firePlayerWeapon();
+    }
+  }
+
+  function updateSimulation(dt) {
+    STATE.time += dt;
+    if (STATE.mode !== 'play' && STATE.mode !== 'demo') return;
+    STATE.runTime += dt;
+
+    // Timers & feedback flashes
+    player.fireCooldown = Math.max(0, player.fireCooldown - dt);
+    player.pulseCooldown = Math.max(0, player.pulseCooldown - dt);
+    player.portalCooldown = Math.max(0, player.portalCooldown - dt);
+    player.portalBoostTimer = Math.max(0, player.portalBoostTimer - dt);
+    player.recoil = Math.max(0, player.recoil - dt * 5.2);
+    player.pulseAnim = Math.max(0, player.pulseAnim - dt * 3.5);
+    STATE.hurtFlash = Math.max(0, STATE.hurtFlash - dt * 1.4);
+    STATE.portalFlash = Math.max(0, STATE.portalFlash - dt * 1.6);
+    STATE.hitMarker = Math.max(0, STATE.hitMarker - dt);
+
+    if (STATE.waveToastTimer > 0) {
+      STATE.waveToastTimer -= dt;
+      if (STATE.waveToastTimer <= 0) elWaveToast.classList.remove('show');
+    }
+    if (STATE.medalToastTimer > 0) {
+      STATE.medalToastTimer -= dt;
+      if (STATE.medalToastTimer <= 0) elMedalToast.classList.remove('show');
+    }
+
+    // Emergency ammo regen if completely dry so neither player nor bot can softlock
+    if (player.ammo === 0) {
+      player.ammoRegenTimer += dt;
+      if (player.ammoRegenTimer >= 0.85) {
+        player.ammo = 6;
+        player.ammoRegenTimer = 0;
+      }
+    } else {
+      player.ammoRegenTimer = 0;
+    }
+
+    // Control player or Demo Bot
+    if (STATE.mode === 'demo') {
+      updateDemoBot(dt);
+    } else {
+      updatePlayerManual(dt);
+    }
+
+    // Integrate player position, portal crossing & wall collisions
+    player.x += player.vx * dt;
+    player.y += player.vy * dt;
+    checkPortalCrossing(player, true, false, false);
+    resolveWorldCollisions(player, 0);
+
+    const pSpeed = Math.hypot(player.vx, player.vy);
+    if (pSpeed > 0.4) {
+      player.bobPhase += dt * (7.5 + pSpeed * 0.7);
+      player.bobAmt = Math.min(1, pSpeed / 6.0);
+    } else {
+      player.bobAmt *= Math.pow(0.02, dt);
+    }
+
+    // High-speed Portal Ram: colliding with an enemy while portal-boosted slams them!
+    if (player.portalBoostTimer > 0.6 && pSpeed > 5.0) {
+      for (let i = enemies.length - 1; i >= 0; i--) {
+        const e = enemies[i];
+        const dx = e.x - player.x, dy = e.y - player.y;
+        const d = Math.hypot(dx, dy);
+        if (d < player.radius + e.radius + 0.18 && d > 0.01) {
+          e.vx += (dx / d) * 14.0;
+          e.vy += (dy / d) * 14.0;
+          e.knockTimer = 0.5;
+          damageEnemy(e, 68, true, 'PORTAL RAM KILL!');
+        }
+      }
+    }
+
+    // Update Pickups
+    for (const pk of pickups) {
+      if (!pk.active) {
+        pk.respawn -= dt;
+        if (pk.respawn <= 0) pk.active = true;
+        continue;
+      }
+      const d = Math.hypot(pk.x - player.x, pk.y - player.y);
+      if (d < 0.85) {
+        if (pk.type === 'health' && player.hp < player.maxHp) {
+          player.hp = Math.min(player.maxHp, player.hp + pk.amount);
+          pk.active = false;
+          pk.respawn = 7.5;
+          audio.sfxPickup(true);
+        } else if (pk.type === 'ammo' && player.ammo < player.maxAmmo) {
+          player.ammo = Math.min(player.maxAmmo, player.ammo + pk.amount);
+          pk.active = false;
+          pk.respawn = 6.8;
+          audio.sfxPickup(false);
+        }
+      }
+    }
+
+    // Update Volatile Kinetic Cores (Portal-Traversing Physics Objects)
+    for (const c of cores) {
+      c.portalCooldown = Math.max(0, c.portalCooldown - dt);
+      c.portalCharged = Math.max(0, c.portalCharged - dt);
+      c.hitByPlayer = Math.max(0, c.hitByPlayer - dt);
+
+      // Player bump push
+      const pdx = c.x - player.x, pdy = c.y - player.y;
+      const pdist = Math.hypot(pdx, pdy);
+      if (pdist < player.radius + c.radius && pdist > 0.001) {
+        const nx = pdx / pdist, ny = pdy / pdist;
+        const overlap = player.radius + c.radius - pdist;
+        c.x += nx * overlap;
+        c.y += ny * overlap;
+        c.vx += nx * (5.5 + pSpeed * 1.1);
+        c.vy += ny * (5.5 + pSpeed * 1.1);
+        c.hitByPlayer = 3.0;
+      }
+
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
+      checkPortalCrossing(c, false, false, true);
+      const hitSpd = resolveWorldCollisions(c, 0.78);
+      if (hitSpd > 6.0) {
+        spawnSparks(c.x, c.y, '#ffae2b', 6);
+      }
+
+      // Rolling friction
+      const drag = Math.pow(0.42, dt);
+      c.vx *= drag;
+      c.vy *= drag;
+
+      // High-speed Core crushes enemies!
+      const cSpd = Math.hypot(c.vx, c.vy);
+      if (cSpd > 4.2 && c.hitByPlayer > 0) {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+          const e = enemies[i];
+          const dx = e.x - c.x, dy = e.y - c.y;
+          const d = Math.hypot(dx, dy);
+          if (d < c.radius + e.radius + 0.16 && d > 0.001) {
+            e.vx += (c.vx / cSpd) * 12.0;
+            e.vy += (c.vy / cSpd) * 12.0;
+            e.knockTimer = 0.45;
+            const label = c.portalCharged > 0 ? 'PORTAL CORE CRUSH!' : 'KINETIC CRUSH!';
+            damageEnemy(e, c.portalCharged > 0 ? 150 : 110, true, label);
+            c.vx *= 0.65;
+            c.vy *= 0.65;
+          }
+        }
+      }
+    }
+
+    // Update Projectiles
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+      const pr = projectiles[i];
+      pr.life -= dt;
+      pr.portalCooldown = Math.max(0, pr.portalCooldown - dt);
+      if (pr.life <= 0) {
+        projectiles.splice(i, 1);
+        continue;
+      }
+
+      pr.x += pr.vx * dt;
+      pr.y += pr.vy * dt;
+
+      if (checkPortalCrossing(pr, false, true, false)) {
+        continue;
+      }
+
+      // Wall hit
+      const gx = Math.floor(pr.x), gy = Math.floor(pr.y);
+      if (isSolidCell(gx, gy)) {
+        spawnSparks(pr.x - pr.vx * dt, pr.y - pr.vy * dt, pr.color, 5);
+        projectiles.splice(i, 1);
+        continue;
+      }
+
+      if (pr.owner === 'player') {
+        let consumed = false;
+        // Check Kinetic Core hit (launches core violently!)
+        for (const c of cores) {
+          if (Math.hypot(c.x - pr.x, c.y - pr.y) < c.radius + pr.radius + 0.1) {
+            const pSpd = Math.hypot(pr.vx, pr.vy) || 1;
+            c.vx += (pr.vx / pSpd) * 13.5;
+            c.vy += (pr.vy / pSpd) * 13.5;
+            c.hitByPlayer = 4.0;
+            if (pr.portalCrossed) c.portalCharged = 3.0;
+            spawnSparks(c.x, c.y, '#ffd447', 10);
+            audio.sfxHit(false);
+            consumed = true;
+            break;
+          }
+        }
+        if (consumed) { projectiles.splice(i, 1); continue; }
+
+        // Check enemy hit
+        for (let j = enemies.length - 1; j >= 0; j--) {
+          const e = enemies[j];
+          if (Math.hypot(e.x - pr.x, e.y - pr.y) < e.radius + pr.radius + 0.18) {
+            const pSpd = Math.hypot(pr.vx, pr.vy) || 1;
+            e.vx += (pr.vx / pSpd) * pr.knock;
+            e.vy += (pr.vy / pSpd) * pr.knock;
+            e.knockTimer = 0.25;
+            const isPortalKill = pr.portalCrossed;
+            damageEnemy(e, pr.dmg, isPortalKill, isPortalKill ? 'PORTAL SHOT KILL!' : '');
+            consumed = true;
+            break;
+          }
+        }
+        if (consumed) { projectiles.splice(i, 1); continue; }
+      } else {
+        // Enemy projectile hits player
+        if (Math.hypot(player.x - pr.x, player.y - pr.y) < player.radius + pr.radius) {
+          damagePlayer(pr.dmg);
+          projectiles.splice(i, 1);
+          continue;
+        }
+      }
+    }
+
+    // Update Enemies
+    for (let i = enemies.length - 1; i >= 0; i--) {
+      const e = enemies[i];
+      e.animPhase += dt * 6.5;
+      e.hitFlash = Math.max(0, e.hitFlash - dt);
+      e.portalCooldown = Math.max(0, e.portalCooldown - dt);
+      e.knockTimer = Math.max(0, e.knockTimer - dt);
+      if (e.spawnWarp > 0) {
+        e.spawnWarp = Math.max(0, e.spawnWarp - dt);
+        continue;
+      }
+
+      const dx = player.x - e.x;
+      const dy = player.y - e.y;
+      const dist = Math.hypot(dx, dy);
+
+      // Chase & steer around pillars when not being knocked back
+      if (e.knockTimer <= 0) {
+        let wishSpd = e.speed;
+        let desiredA = Math.atan2(dy, dx);
+        if (e.ranged && dist < 4.5 && hasLineOfSight(e.x, e.y, player.x, player.y)) {
+          wishSpd = e.speed * 0.45;
+          desiredA += Math.PI * 0.5 * (i % 2 === 0 ? 1 : -1);
+        }
+        // Simple pillar avoidance
+        const moveA = steerClearestDirection(e.x, e.y, desiredA);
+        const tvx = Math.cos(moveA) * wishSpd;
+        const tvy = Math.sin(moveA) * wishSpd;
+        e.vx += (tvx - e.vx) * Math.min(1, dt * 6.0);
+        e.vy += (tvy - e.vy) * Math.min(1, dt * 6.0);
+      } else {
+        e.vx *= Math.pow(0.18, dt);
+        e.vy *= Math.pow(0.18, dt);
+      }
+
+      // Enemy-enemy soft separation
+      for (let j = 0; j < enemies.length; j++) {
+        if (i === j) continue;
+        const o = enemies[j];
+        const sx = e.x - o.x, sy = e.y - o.y;
+        const sd = Math.hypot(sx, sy);
+        if (sd < 0.85 && sd > 0.001) {
+          e.vx += (sx / sd) * 3.0 * dt;
+          e.vy += (sy / sd) * 3.0 * dt;
+        }
+      }
+
+      e.x += e.vx * dt;
+      e.y += e.vy * dt;
+      checkPortalCrossing(e, false, false, false);
+      const wallImpact = resolveWorldCollisions(e, 0.3);
+
+      // Physics Wall-Slam damage when knocked hard into a wall/pillar!
+      if (e.knockTimer > 0 && wallImpact > 5.0) {
+        if (damageEnemy(e, 28, true, 'WALL SLAM KILL!')) continue;
+      }
+
+      // Attacks
+      e.attackCd = Math.max(0, e.attackCd - dt);
+      if (dist < 1.25) {
+        // Melee attack with wind-up
+        if (e.attackCd <= 0) {
+          e.meleeWindup += dt;
+          if (e.meleeWindup >= 0.42) {
+            e.meleeWindup = 0;
+            e.attackCd = e.baseCd;
+            damagePlayer(e.dmg);
+          }
+        }
+      } else {
+        e.meleeWindup = 0;
+        if (e.ranged && e.attackCd <= 0 && dist < 13.0 && hasLineOfSight(e.x, e.y, player.x, player.y)) {
+          e.attackCd = e.baseCd + Math.random() * 0.45;
+          const nx = dx / dist, ny = dy / dist;
+          projectiles.push({
+            owner: 'enemy',
+            x: e.x + nx * 0.4,
+            y: e.y + ny * 0.4,
+            vx: nx * e.shotSpd,
+            vy: ny * e.shotSpd,
+            dmg: e.dmg,
+            radius: 0.22,
+            life: 2.8,
+            portalCooldown: 0,
+            portalCrossed: false,
+            style: e.type === 'bruiser' ? 'orange' : 'green',
+            color: e.type === 'bruiser' ? '#ff982b' : '#38ff9c'
+          });
+        }
+      }
+    }
+
+    // Update Sparks
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const sp = sparks[i];
+      sp.life -= dt;
+      if (sp.life <= 0) { sparks.splice(i, 1); continue; }
+      sp.x += sp.vx * dt;
+      sp.y += sp.vy * dt;
+    }
+
+    // Check Wave Clear / Win Condition
+    if (enemies.length === 0 && (STATE.mode === 'play' || STATE.mode === 'demo')) {
+      if (STATE.wave >= STATE.maxWaves) {
+        triggerWin();
+        return;
+      }
+      if (STATE.waveDelay <= 0) {
+        STATE.waveDelay = 1.25;
+        showWaveToast('WAVE ' + STATE.wave + ' CLEARED!');
+      } else {
+        STATE.waveDelay -= dt;
+        if (STATE.waveDelay <= 0) {
+          startWave(STATE.wave + 1);
+        }
+      }
+    }
+
+    updateHud();
+  }
+
+  function updateHud() {
+    hudWave.textContent = STATE.wave + ' / ' + STATE.maxWaves;
+    hudEnemies.textContent = String(enemies.length);
+    hudPortals.textContent = String(STATE.portalsUsed);
+    hudPhys.textContent = String(STATE.physicsKills);
+
+    const hpVal = Math.ceil(player.hp);
+    hudHp.textContent = String(hpVal);
+    hudHp.className = 'hud-num ' + (hpVal > 50 ? 'green' : (hpVal > 25 ? 'gold' : 'red'));
+    barHp.style.width = clamp((player.hp / player.maxHp) * 100, 0, 100) + '%';
+
+    hudAmmo.textContent = String(player.ammo);
+    barAmmo.style.width = clamp((player.ammo / player.maxAmmo) * 100, 0, 100) + '%';
+
+    const pulsePct = clamp(1 - player.pulseCooldown / player.pulseMaxCooldown, 0, 1);
+    barPulse.style.width = (pulsePct * 100) + '%';
+    hudPulse.textContent = pulsePct >= 0.99 ? 'READY' : Math.ceil(player.pulseCooldown * 10) / 10 + 's';
+
+    const spd = Math.hypot(player.vx, player.vy);
+    hudSpeed.textContent = spd.toFixed(1) + ' m/s';
+    hudSpeed.className = 'hud-num ' + (player.portalBoostTimer > 0 ? 'gold' : 'cyan');
+  }
+
+  /* ==========================================================================
+     11. RECURSIVE PORTAL RAYCASTER + DEPTH-BUFFERED SPRITES + WEAPON + MINIMAP
+     ========================================================================== */
+  function shadeColor32(c32, shade, tintR, tintG, tintB, tintAmt) {
+    let r = (c32 & 255) * shade;
+    let g = ((c32 >> 8) & 255) * shade;
+    let b = ((c32 >> 16) & 255) * shade;
+    if (tintAmt > 0) {
+      r = r * (1 - tintAmt) + tintR * tintAmt;
+      g = g * (1 - tintAmt) + tintG * tintAmt;
+      b = b * (1 - tintAmt) + tintB * tintAmt;
+    }
+    return 0xFF000000 | (clamp(b | 0, 0, 255) << 16) | (clamp(g | 0, 0, 255) << 8) | clamp(r | 0, 0, 255);
+  }
+
+  function render3DScene() {
+    const dirX = Math.cos(player.angle);
+    const dirY = Math.sin(player.angle);
+    const fovHalfTan = 0.65; // ~66 deg horizontal FOV
+    const planeX = -dirY * fovHalfTan;
+    const planeY = dirX * fovHalfTan;
+    const projScale = RW / (2 * fovHalfTan);
+    const halfH = RH >> 1;
+
+    // 1. Textured Floor & Ceiling Casting (with dynamic portal floor glow)
+    const rayDirX0 = dirX - planeX, rayDirY0 = dirY - planeY;
+    const rayDirX1 = dirX + planeX, rayDirY1 = dirY + planeY;
+    const invRW = 1 / RW;
+
+    for (let y = halfH + 1; y < RH; y++) {
+      const p = y - halfH;
+      const rowDist = (0.5 * projScale) / p;
+      const shade = clamp(1.18 / (1 + rowDist * 0.16), 0.14, 1.0);
+      const stepX = rowDist * (rayDirX1 - rayDirX0) * invRW;
+      const stepY = rowDist * (rayDirY1 - rayDirY0) * invRW;
+      let fx = player.x + rowDist * rayDirX0;
+      let fy = player.y + rowDist * rayDirY0;
+
+      const rowOffFloor = y * RW;
+      const rowOffCeil = (RH - y - 1) * RW;
+
+      for (let x = 0; x < RW; x++) {
+        const tx = ((fx * TEX_SIZE) & 63);
+        const ty = ((fy * TEX_SIZE) & 63);
+        const tidx = (ty << 6) | tx;
+
+        // Subtle cyan/orange ambient spill near portals
+        const dA2 = (fx - 1.0) * (fx - 1.0) + (fy - 8.0) * (fy - 8.0);
+        const dB2 = (fx - 15.0) * (fx - 15.0) + (fy - 8.0) * (fy - 8.0);
+        let tr = 0, tg = 0, tb = 0, ta = 0;
+        if (dA2 < 9.0) {
+          ta = (1 - dA2 / 9.0) * 0.28;
+          tr = 34; tg = 227; tb = 255;
+        } else if (dB2 < 9.0) {
+          ta = (1 - dB2 / 9.0) * 0.28;
+          tr = 255; tg = 123; tb = 28;
+        }
+
+        pixels32[rowOffFloor + x] = shadeColor32(TEX_FLOOR[tidx], shade, tr, tg, tb, ta);
+        pixels32[rowOffCeil + x] = shadeColor32(TEX_CEIL[tidx], shade * 0.85, tr, tg, tb, ta * 0.7);
+        fx += stepX;
+        fy += stepY;
+      }
+    }
+    // Horizon seam line
+    const midOff = halfH * RW;
+    for (let x = 0; x < RW; x++) pixels32[midOff + x] = 0xFF14100C;
+
+    // 2. Recursive DDA Wall & Portal Raycaster
+    const pulseAnim = 0.5 + 0.5 * Math.sin(STATE.time * 6.5);
+
+    for (let x = 0; x < RW; x++) {
+      const camX = (2 * x) * invRW - 1;
+      let rdx = dirX + planeX * camX;
+      let rdy = dirY + planeY * camX;
+      let ox = player.x;
+      let oy = player.y;
+
+      let totalDist = 0;
+      let depth = 0;
+      let hitTile = 1;
+      let hitSide = 0;
+      let hitWallX = 0;
+      let firstPortalId = 0;
+      let firstPortalDist = 1e9;
+      let firstPortalTop = 0;
+      let firstPortalBot = RH - 1;
+      let portalFrameHit = 0; // 0 none, 1 cyan jamb, 2 orange jamb
+      let portalTintId = 0;
+
+      for (let bounce = 0; bounce < 4; bounce++) {
+        let mapX = Math.floor(ox);
+        let mapY = Math.floor(oy);
+        const deltaDistX = rdx === 0 ? 1e30 : Math.abs(1 / rdx);
+        const deltaDistY = rdy === 0 ? 1e30 : Math.abs(1 / rdy);
+
+        let stepX, stepY, sideDistX, sideDistY;
+        if (rdx < 0) {
+          stepX = -1;
+          sideDistX = (ox - mapX) * deltaDistX;
+        } else {
+          stepX = 1;
+          sideDistX = (mapX + 1.0 - ox) * deltaDistX;
+        }
+        if (rdy < 0) {
+          stepY = -1;
+          sideDistY = (oy - mapY) * deltaDistY;
+        } else {
+          stepY = 1;
+          sideDistY = (mapY + 1.0 - oy) * deltaDistY;
+        }
+
+        let side = 0;
+        let tile = 0;
+        let guard = 0;
+        while (tile === 0 && guard++ < 48) {
+          if (sideDistX < sideDistY) {
+            sideDistX += deltaDistX;
+            mapX += stepX;
+            side = 0;
+          } else {
+            sideDistY += deltaDistY;
+            mapY += stepY;
+            side = 1;
+          }
+          if (mapX < 0 || mapY < 0 || mapX >= MAP_SIZE || mapY >= MAP_SIZE) {
+            tile = 1;
+            break;
+          }
+          tile = MAP[mapY][mapX];
+        }
+
+        const segDist = Math.max(0.001, side === 0 ? (sideDistX - deltaDistX) : (sideDistY - deltaDistY));
+        const hx = ox + rdx * segDist;
+        const hy = oy + rdy * segDist;
+
+        // Check if we hit the front face of Portal A or Portal B
+        const hitPortalA = (tile === 3 && side === 0 && rdx < 0);
+        const hitPortalB = (tile === 4 && side === 0 && rdx > 0);
+
+        if (hitPortalA || hitPortalB) {
+          const inP = hitPortalA ? PORTAL_A : PORTAL_B;
+          const outP = inP.link;
+          const u = (hy - inP.yMin) / (inP.yMax - inP.yMin); // 0..1 across 2-unit portal
+
+          // Glowing energy portal doorframe jambs on outer 6%
+          if (u < 0.06 || u > 0.94) {
+            totalDist += segDist;
+            hitTile = tile;
+            hitSide = side;
+            hitWallX = u;
+            portalFrameHit = inP.id;
+            break;
+          }
+
+          const distAtPortal = totalDist + segDist;
+          if (depth === 0) {
+            firstPortalId = inP.id;
+            firstPortalDist = distAtPortal;
+            const pLineH = Math.floor(projScale / distAtPortal);
+            firstPortalTop = clamp(halfH - (pLineH >> 1), 0, RH - 1);
+            firstPortalBot = clamp(halfH + (pLineH >> 1), 0, RH - 1);
+          }
+
+          if (depth < 2) {
+            // Seamlessly continue ray from the linked exit portal!
+            totalDist = distAtPortal;
+            portalTintId = inP.id;
+            const tr = transformPointAndVec(hx, hy, rdx, rdy, inP, outP, 0.002);
+            ox = tr.x;
+            oy = tr.y;
+            rdx = tr.vx;
+            rdy = tr.vy;
+            depth++;
+            continue;
+          } else {
+            // Max recursion depth reached -> render glowing energy vortex fill
+            totalDist = distAtPortal;
+            hitTile = tile;
+            hitSide = side;
+            hitWallX = u;
+            portalFrameHit = inP.id;
+            break;
+          }
+        }
+
+        // Solid wall or pillar hit
+        totalDist += segDist;
+        hitTile = tile;
+        hitSide = side;
+        hitWallX = side === 0 ? (hy - Math.floor(hy)) : (hx - Math.floor(hx));
+        break;
+      }
+
+      zBuf[x] = totalDist;
+      portalIdBuf[x] = firstPortalId;
+      portalFirstDist[x] = firstPortalDist;
+      portalTopBuf[x] = firstPortalTop;
+      portalBotBuf[x] = firstPortalBot;
+
+      const lineH = Math.floor(projScale / Math.max(0.05, totalDist));
+      const rawStart = halfH - (lineH >> 1);
+      const rawEnd = halfH + (lineH >> 1);
+      const drawStart = clamp(rawStart, 0, RH - 1);
+      const drawEnd = clamp(rawEnd, 0, RH - 1);
+
+      const tex = (hitTile === 2) ? TEX_PILLAR : TEX_WALL;
+      const texX = clamp(Math.floor(hitWallX * TEX_SIZE), 0, 63);
+      let shade = clamp(1.22 / (1 + totalDist * 0.14), 0.14, 1.0);
+      if (hitSide === 1) shade *= 0.78;
+
+      let tr = 0, tg = 0, tb = 0, ta = 0;
+      if (portalTintId === 1) { tr = 34; tg = 227; tb = 255; ta = 0.14; }
+      else if (portalTintId === 2) { tr = 255; tg = 123; tb = 28; ta = 0.14; }
+
+      const step = TEX_SIZE / Math.max(1, lineH);
+      let texPos = (drawStart - rawStart) * step;
+
+      if (portalFrameHit > 0) {
+        const isCyan = portalFrameHit === 1;
+        const fr = isCyan ? 40 + 50 * pulseAnim : 255;
+        const fg = isCyan ? 225 : 125 + 65 * pulseAnim;
+        const fb = isCyan ? 255 : 30 + 35 * pulseAnim;
+        const col32 = packRGBA(fr | 0, fg | 0, fb | 0);
+        for (let y = drawStart; y <= drawEnd; y++) {
+          pixels32[y * RW + x] = col32;
+        }
+      } else {
+        for (let y = drawStart; y <= drawEnd; y++) {
+          const texY = (texPos & 63);
+          texPos += step;
+          pixels32[y * RW + x] = shadeColor32(tex[(texY << 6) | texX], shade, tr, tg, tb, ta);
+        }
+      }
+
+      // Draw crisp glowing top & bottom portal archway energy lintels at firstPortalDist
+      if (firstPortalId > 0) {
+        const isCyan = firstPortalId === 1;
+        const beamCol = isCyan
+          ? packRGBA((50 + 40 * pulseAnim) | 0, 235, 255)
+          : packRGBA(255, (130 + 55 * pulseAnim) | 0, 36);
+        const trimH = clamp(Math.floor((firstPortalBot - firstPortalTop) * 0.045), 2, 7);
+        for (let t = 0; t < trimH; t++) {
+          const yt = firstPortalTop + t;
+          const yb = firstPortalBot - t;
+          if (yt >= 0 && yt < RH) pixels32[yt * RW + x] = beamCol;
+          if (yb >= 0 && yb < RH) pixels32[yb * RW + x] = beamCol;
+        }
+      }
+    }
+
+    // 3. Collect Real Sprites + Seamless Portal Ghost Sprites!
+    const drawList = [];
+    function pushEntityWithPortalGhosts(x, y, tex, scale, vShift, isGlowing) {
+      drawList.push({ x, y, tex, scale, vShift, isGlowing, ghostPortal: 0 });
+      // Virtual ghost seen looking West into Portal A (appears shifted -14 on X)
+      drawList.push({ x: x - 14.0, y, tex, scale, vShift, isGlowing, ghostPortal: 1 });
+      // Virtual ghost seen looking East into Portal B (appears shifted +14 on X)
+      drawList.push({ x: x + 14.0, y, tex, scale, vShift, isGlowing, ghostPortal: 2 });
+    }
+
+    for (const pk of pickups) {
+      if (!pk.active) continue;
+      const bob = Math.sin(STATE.time * 4.0 + pk.x) * 0.06;
+      pushEntityWithPortalGhosts(pk.x, pk.y, pk.type === 'health' ? SPRITES.health : SPRITES.ammo, 0.56, 0.24 + bob, true);
+    }
+
+    for (const c of cores) {
+      const hot = Math.hypot(c.vx, c.vy) > 4.2 || c.portalCharged > 0;
+      pushEntityWithPortalGhosts(c.x, c.y, hot ? SPRITES.coreHot : SPRITES.core, 0.68, 0.16, hot);
+    }
+
+    for (const e of enemies) {
+      const f = Math.floor(e.animPhase) & 1;
+      let tex;
+      if (e.type === 'imp') tex = e.hitFlash > 0 ? SPRITES.impHit : (f ? SPRITES.imp1 : SPRITES.imp0);
+      else if (e.type === 'acolyte') tex = e.hitFlash > 0 ? SPRITES.acoHit : (f ? SPRITES.aco1 : SPRITES.aco0);
+      else tex = e.hitFlash > 0 ? SPRITES.bruHit : (f ? SPRITES.bru1 : SPRITES.bru0);
+      const sc = e.type === 'bruiser' ? 1.05 : 0.88;
+      pushEntityWithPortalGhosts(e.x, e.y, tex, sc, 0.06, e.hitFlash > 0);
+    }
+
+    for (const pr of projectiles) {
+      let tex = SPRITES.boltPlayer;
+      if (pr.owner === 'player') tex = pr.portalCrossed ? SPRITES.boltPortal : SPRITES.boltPlayer;
+      else tex = pr.style === 'orange' ? SPRITES.boltEnemyOrange : SPRITES.boltEnemyGreen;
+      pushEntityWithPortalGhosts(pr.x, pr.y, tex, 0.42, 0.02, true);
+    }
+
+    // Compute camera-space depth & sort far-to-near
+    const invDet = 1.0 / (planeX * dirY - dirX * planeY);
+    for (const sp of drawList) {
+      const sx = sp.x - player.x;
+      const sy = sp.y - player.y;
+      sp.tx = invDet * (dirY * sx - dirX * sy);
+      sp.ty = invDet * (-planeY * sx + planeX * sy);
+    }
+    drawList.sort((a, b) => b.ty - a.ty);
+
+    for (const sp of drawList) {
+      if (sp.ty <= 0.18 || sp.ty > 26.0) continue;
+      const screenX = Math.floor((RW * 0.5) * (1 + sp.tx / sp.ty));
+      const spSize = Math.floor((projScale / sp.ty) * sp.scale);
+      if (spSize < 2 || spSize > RH * 3) continue;
+
+      const vOffset = Math.floor((projScale / sp.ty) * sp.vShift);
+      const drawStartY = halfH - (spSize >> 1) + vOffset;
+      const drawEndY = drawStartY + spSize - 1;
+      const drawStartX = screenX - (spSize >> 1);
+      const drawEndX = drawStartX + spSize - 1;
+
+      const minX = clamp(drawStartX, 0, RW - 1);
+      const maxX = clamp(drawEndX, 0, RW - 1);
+      if (minX > maxX) continue;
+
+      const shade = sp.isGlowing ? 1.0 : clamp(1.25 / (1 + sp.ty * 0.13), 0.2, 1.0);
+      const tex = sp.tex;
+
+      for (let stripe = minX; stripe <= maxX; stripe++) {
+        // Depth & portal-window visibility test
+        if (sp.ty >= zBuf[stripe]) continue;
+        let clipTop = 0;
+        let clipBot = RH - 1;
+
+        if (sp.ghostPortal === 0) {
+          if (portalIdBuf[stripe] !== 0 && sp.ty >= portalFirstDist[stripe]) continue;
+        } else {
+          if (portalIdBuf[stripe] !== sp.ghostPortal) continue;
+          if (sp.ty <= portalFirstDist[stripe]) continue;
+          clipTop = portalTopBuf[stripe];
+          clipBot = portalBotBuf[stripe];
+        }
+
+        const texX = clamp(Math.floor(((stripe - drawStartX) * 64) / spSize), 0, 63);
+        const y0 = clamp(drawStartY, clipTop, clipBot);
+        const y1 = clamp(drawEndY, clipTop, clipBot);
+
+        for (let y = y0; y <= y1; y++) {
+          const texY = clamp(Math.floor(((y - drawStartY) * 64) / spSize), 0, 63);
+          const col = tex[(texY << 6) | texX];
+          if (col !== 0) {
+            pixels32[y * RW + stripe] = shade === 1.0 ? col : shadeColor32(col, shade, 0, 0, 0, 0);
+          }
+        }
+      }
+    }
+
+    // Blit pixel buffer to main high-res display canvas
+    renderCtx.putImageData(imgData, 0, 0);
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    viewCtx.imageSmoothingEnabled = false;
+    viewCtx.drawImage(renderCanvas, 0, 0, vw, vh);
+    viewCtx.imageSmoothingEnabled = true;
+
+    // 4. First-Person Weapon Viewmodel, Crosshair & Screen Flashes
+    if (STATE.mode === 'play' || STATE.mode === 'demo') {
+      drawWeaponViewmodel(vw, vh);
+      drawCrosshair(vw, vh);
+      drawScreenFlashes(vw, vh);
+      drawMinimap();
+    }
+  }
+
+  function drawWeaponViewmodel(vw, vh) {
+    const cx = vw * 0.5;
+    const bobX = Math.cos(player.bobPhase) * 10 * player.bobAmt;
+    const bobY = Math.abs(Math.sin(player.bobPhase)) * 12 * player.bobAmt;
+    const recoilY = player.recoil * 26;
+    const scale = clamp(Math.min(vw, vh) / 680, 0.72, 1.35);
+
+    viewCtx.save();
+    viewCtx.translate(cx + bobX, vh + bobY + recoilY);
+    viewCtx.scale(scale, scale);
+
+    // Grav-Pulse shockwave ring flash
+    if (player.pulseAnim > 0) {
+      viewCtx.strokeStyle = `rgba(255, 165, 50, ${player.pulseAnim * 0.75})`;
+      viewCtx.lineWidth = 8 * player.pulseAnim;
+      viewCtx.beginPath();
+      viewCtx.arc(0, -145, 45 + (1 - player.pulseAnim) * 190, 0, Math.PI * 2);
+      viewCtx.stroke();
+    }
+
+    // Muzzle flash
+    if (player.recoil > 0.65) {
+      const mGrad = viewCtx.createRadialGradient(0, -172, 4, 0, -172, 68);
+      mGrad.addColorStop(0, '#ffffff');
+      mGrad.addColorStop(0.4, player.portalBoostTimer > 0 ? '#ffd447' : '#22e3ff');
+      mGrad.addColorStop(1, 'rgba(0,0,0,0)');
+      viewCtx.fillStyle = mGrad;
+      viewCtx.beginPath();
+      viewCtx.arc(0, -172, 68, 0, Math.PI * 2);
+      viewCtx.fill();
+    }
+
+    // Main Kinetic Rail-Pulse Rifle chassis
+    viewCtx.fillStyle = '#1b202d';
+    viewCtx.beginPath();
+    viewCtx.moveTo(-48, 12);
+    viewCtx.lineTo(-34, -138);
+    viewCtx.lineTo(34, -138);
+    viewCtx.lineTo(48, 12);
+    viewCtx.closePath();
+    viewCtx.fill();
+
+    // Upper steel rails
+    viewCtx.fillStyle = '#333d54';
+    viewCtx.fillRect(-30, -158, 16, 130);
+    viewCtx.fillRect(14, -158, 16, 130);
+    viewCtx.fillStyle = '#536180';
+    viewCtx.fillRect(-28, -158, 4, 124);
+    viewCtx.fillRect(16, -158, 4, 124);
+
+    // Central glowing energy core
+    const boosted = player.portalBoostTimer > 0;
+    const coreColor = boosted ? '#ffd447' : '#22e3ff';
+    viewCtx.fillStyle = '#0c1018';
+    viewCtx.fillRect(-10, -152, 20, 120);
+    viewCtx.fillStyle = coreColor;
+    viewCtx.shadowColor = coreColor;
+    viewCtx.shadowBlur = 14;
+    viewCtx.fillRect(-6, -148, 12, 92);
+    viewCtx.shadowBlur = 0;
+
+    // Cross-braces
+    viewCtx.fillStyle = '#252c3d';
+    viewCtx.fillRect(-36, -110, 72, 12);
+    viewCtx.fillRect(-40, -64, 80, 14);
+
+    viewCtx.restore();
+  }
+
+  function drawCrosshair(vw, vh) {
+    const cx = vw * 0.5;
+    const cy = vh * 0.5;
+    const spread = 7 + player.recoil * 9;
+    const lookingPortal = portalIdBuf[RW >> 1] !== 0;
+
+    viewCtx.save();
+    viewCtx.strokeStyle = STATE.hitMarker > 0 ? '#ff3855' : (lookingPortal ? '#22e3ff' : 'rgba(238, 243, 255, 0.86)');
+    viewCtx.lineWidth = 2;
+    viewCtx.beginPath();
+    viewCtx.moveTo(cx - spread - 6, cy); viewCtx.lineTo(cx - spread, cy);
+    viewCtx.moveTo(cx + spread, cy); viewCtx.lineTo(cx + spread + 6, cy);
+    viewCtx.moveTo(cx, cy - spread - 6); viewCtx.lineTo(cx, cy - spread);
+    viewCtx.moveTo(cx, cy + spread); viewCtx.lineTo(cx, cy + spread + 6);
+    viewCtx.stroke();
+
+    if (STATE.hitMarker > 0) {
+      viewCtx.strokeStyle = '#ff3855';
+      viewCtx.beginPath();
+      viewCtx.moveTo(cx - 8, cy - 8); viewCtx.lineTo(cx - 3, cy - 3);
+      viewCtx.moveTo(cx + 8, cy - 8); viewCtx.lineTo(cx + 3, cy - 3);
+      viewCtx.moveTo(cx - 8, cy + 8); viewCtx.lineTo(cx - 3, cy + 3);
+      viewCtx.moveTo(cx + 8, cy + 8); viewCtx.lineTo(cx + 3, cy + 3);
+      viewCtx.stroke();
+    }
+    viewCtx.restore();
+  }
+
+  function drawScreenFlashes(vw, vh) {
+    if (STATE.hurtFlash > 0) {
+      const g = viewCtx.createRadialGradient(vw * 0.5, vh * 0.5, vh * 0.25, vw * 0.5, vh * 0.5, vw * 0.7);
+      g.addColorStop(0, 'rgba(255, 30, 60, 0)');
+      g.addColorStop(1, `rgba(255, 24, 58, ${STATE.hurtFlash * 0.72})`);
+      viewCtx.fillStyle = g;
+      viewCtx.fillRect(0, 0, vw, vh);
+    }
+    if (STATE.portalFlash > 0) {
+      viewCtx.strokeStyle = STATE.portalFlashColor;
+      viewCtx.globalAlpha = STATE.portalFlash * 0.65;
+      viewCtx.lineWidth = 24;
+      viewCtx.strokeRect(0, 0, vw, vh);
+      viewCtx.globalAlpha = 1;
+    }
+  }
+
+  function drawMinimap() {
+    const s = 128;
+    const cell = s / MAP_SIZE;
+    miniCtx.fillStyle = '#090d16';
+    miniCtx.fillRect(0, 0, s, s);
+
+    // Walls & pillars
+    for (let y = 0; y < MAP_SIZE; y++) {
+      for (let x = 0; x < MAP_SIZE; x++) {
+        const t = MAP[y][x];
+        if (t === 1) {
+          miniCtx.fillStyle = '#293247';
+          miniCtx.fillRect(x * cell, y * cell, cell, cell);
+        } else if (t === 2) {
+          miniCtx.fillStyle = '#4e4860';
+          miniCtx.fillRect(x * cell, y * cell, cell, cell);
+        } else if (t === 3) {
+          miniCtx.fillStyle = '#22e3ff';
+          miniCtx.fillRect(x * cell, y * cell, cell, cell);
+        } else if (t === 4) {
+          miniCtx.fillStyle = '#ff7b1c';
+          miniCtx.fillRect(x * cell, y * cell, cell, cell);
+        }
+      }
+    }
+
+    // Pickups
+    for (const pk of pickups) {
+      if (!pk.active) continue;
+      miniCtx.fillStyle = pk.type === 'health' ? '#38f28a' : '#22e3ff';
+      miniCtx.fillRect(pk.x * cell - 2, pk.y * cell - 2, 4, 4);
+    }
+
+    // Kinetic Cores
+    for (const c of cores) {
+      miniCtx.fillStyle = '#ffd447';
+      miniCtx.beginPath();
+      miniCtx.arc(c.x * cell, c.y * cell, 3, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+
+    // Enemies
+    for (const e of enemies) {
+      miniCtx.fillStyle = e.type === 'bruiser' ? '#ff982b' : (e.type === 'acolyte' ? '#b86bff' : '#ff3855');
+      miniCtx.beginPath();
+      miniCtx.arc(e.x * cell, e.y * cell, 3, 0, Math.PI * 2);
+      miniCtx.fill();
+    }
+
+    // Player & facing cone
+    const px = player.x * cell;
+    const py = player.y * cell;
+    miniCtx.strokeStyle = 'rgba(34, 227, 255, 0.7)';
+    miniCtx.lineWidth = 1.5;
+    miniCtx.beginPath();
+    miniCtx.moveTo(px, py);
+    miniCtx.lineTo(px + Math.cos(player.angle) * 14, py + Math.sin(player.angle) * 14);
+    miniCtx.stroke();
+
+    miniCtx.fillStyle = '#ffffff';
+    miniCtx.beginPath();
+    miniCtx.arc(px, py, 3.2, 0, Math.PI * 2);
+    miniCtx.fill();
+  }
+
+  /* ==========================================================================
+     12. MAIN LOOP (Includes live rotating backdrop on Title screen)
+     ========================================================================== */
+  initPickups();
+  initCores();
+  let lastTime = performance.now();
+
+  function frame(now) {
+    const dt = Math.min(0.05, Math.max(0.001, (now - lastTime) / 1000));
+    lastTime = now;
+
+    if (STATE.mode === 'title') {
+      STATE.time += dt;
+      // Live attract-mode camera orbiting the real portal room behind the title card
+      player.x = 8.0 + Math.cos(STATE.time * 0.28) * 2.2;
+      player.y = 8.0 + Math.sin(STATE.time * 0.28) * 2.2;
+      player.angle = wrapAngle(STATE.time * 0.35);
+      render3DScene();
+    } else if (STATE.mode === 'play' || STATE.mode === 'demo') {
+      updateSimulation(dt);
+      render3DScene();
+    } else {
+      STATE.time += dt;
+      render3DScene();
+    }
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

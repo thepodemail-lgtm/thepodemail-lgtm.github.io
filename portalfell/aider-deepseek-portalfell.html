@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#07070d">
+<title>PORTALFELL</title>
+<!--
+================================================================================
+  PORTALFELL — CREDITS
+================================================================================
+  Every asset in this file is generated procedurally at runtime by the code
+  contained in this file. There are NO external files, NO downloaded images,
+  NO sampled audio, and NO third-party libraries of any kind.
+
+  Textures ......... Generated in-code (brick, stone, floor tile, ceiling panel,
+                     portal energy fields) via typed-array pixel loops.
+  Sprites .......... Generated in-code (imp, caster, health kit, ammo crate,
+                     plasma bolt) via HTML5 Canvas 2D drawing.
+  Music ............ Generated in-code with the Web Audio API
+                     (oscillator + filtered-noise synthesis, 100 BPM loop,
+                     a custom dark-industrial pattern written for this room).
+  Sound effects .... Generated in-code with the Web Audio API.
+  Code / design .... Original work written for this brief.
+
+  Licence: all content in this file is original, dedicated to the public
+  domain (CC0). No attribution required, none infringed.
+
+  Physics wildcard: portal transit transforms VELOCITY (not just position)
+  for the player, for enemies, and for enemy plasma bolts — so momentum is
+  carried through portals and bolts can be re-aimed by the room's geometry.
+================================================================================
+-->
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  html,body{
+    width:100%;height:100%;overflow:hidden;background:#040408;color:#dfe3f0;
+    font-family:"Courier New",Courier,monospace;
+    -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+    touch-action:none;overscroll-behavior:none;
+  }
+  #view{
+    position:absolute;inset:0;width:100%;height:100%;display:block;
+    image-rendering:pixelated;image-rendering:-moz-crisp-edges;image-rendering:crisp-edges;
+    cursor:crosshair;
+  }
+  /* ---------------- HUD ---------------- */
+  #hud{position:absolute;inset:0;pointer-events:none;opacity:0;transition:opacity .25s;}
+  #hud.on{opacity:1;}
+
+  #waveLbl{
+    position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    font-size:13px;letter-spacing:4px;color:#9fb2d8;text-shadow:0 0 12px #2c4a8a;
+    border:1px solid #24304d;padding:5px 16px;background:rgba(8,10,20,.55);
+  }
+  #hpWrap{
+    position:absolute;left:18px;bottom:18px;width:210px;height:26px;
+    border:2px solid #3a1b1b;background:rgba(20,6,6,.6);overflow:hidden;
+    box-shadow:0 0 18px rgba(180,30,30,.25);
+  }
+  #hpFill{
+    position:absolute;inset:0;width:100%;transform-origin:left center;
+    background:linear-gradient(180deg,#ff5a4a,#a01010 70%,#5c0606);
+    transition:transform .12s linear,background .3s;
+  }
+  #hpTxt{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    font-size:13px;font-weight:bold;letter-spacing:2px;color:#ffe9e9;
+    text-shadow:0 0 6px #000,0 0 12px #000;
+  }
+  #ammoWrap{
+    position:absolute;right:18px;bottom:18px;text-align:right;
+    font-size:13px;letter-spacing:3px;color:#ffd479;text-shadow:0 0 12px #7a4a00;
+    border:2px solid #3d3213;background:rgba(22,16,4,.6);padding:8px 14px;
+  }
+  #ammoNum{font-size:22px;color:#ffe9a8;display:block;letter-spacing:1px;}
+  #cross{
+    position:absolute;left:50%;top:50%;width:22px;height:22px;margin:-11px 0 0 -11px;
+  }
+  #cross:before,#cross:after{
+    content:"";position:absolute;background:#8fd0ff;box-shadow:0 0 6px #2f8fff;
+    opacity:.85;
+  }
+  #cross:before{left:50%;top:0;width:2px;height:100%;margin-left:-1px;}
+  #cross:after{top:50%;left:0;height:2px;width:100%;margin-top:-1px;}
+  #cross.hot:before,#cross.hot:after{background:#ff8a5a;box-shadow:0 0 8px #ff4400;}
+
+  #muteBtn{
+    position:absolute;top:12px;right:12px;min-width:44px;height:44px;padding:0 14px;
+    background:rgba(10,14,26,.85);border:1px solid #2a3c5e;color:#9fc4ff;
+    font-size:12px;letter-spacing:2px;font-family:inherit;cursor:pointer;pointer-events:auto;
+    display:flex;align-items:center;justify-content:center;z-index:30;
+    transition:background .15s,border-color .15s,color .15s;
+  }
+  #muteBtn:hover{background:rgba(20,30,52,.95);border-color:#4a6ea8;}
+  #muteBtn.muted{color:#5a6070;border-color:#222a3a;}
+
+  /* ---------------- Overlay ---------------- */
+  #overlay{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    z-index:20;padding:20px;
+    background:radial-gradient(ellipse at 50% 45%,rgba(10,16,36,.82),rgba(2,3,8,.96) 75%);
+    opacity:1;transition:opacity .3s;
+  }
+  #overlay.hide{opacity:0;pointer-events:none;}
+  .panel{
+    text-align:center;max-width:560px;width:100%;
+    border:1px solid #1e2c48;background:rgba(6,9,18,.88);
+    padding:34px 26px 30px;box-shadow:0 0 60px rgba(30,70,160,.22),inset 0 0 60px rgba(20,50,120,.08);
+  }
+  .logo{
+    font-size:clamp(30px,8.5vw,58px);letter-spacing:11px;font-weight:bold;
+    color:#dceaff;text-shadow:0 0 18px #2f78ff,0 0 42px #1440a0,0 0 70px #0a2a70;
+    margin:0 0 6px -11px;
+  }
+  .tag{
+    font-size:11px;letter-spacing:5px;color:#5d80b8;margin-bottom:26px;
+    text-transform:uppercase;
+  }
+  .btn{
+    display:block;width:100%;max-width:300px;margin:11px auto;
+    padding:15px 20px;font-family:inherit;font-size:15px;letter-spacing:4px;
+    background:linear-gradient(180deg,#12203c,#0a1222);
+    border:1px solid #2b4b80;color:#bcd8ff;cursor:pointer;
+    transition:background .15s,color .15s,border-color .15s,transform .08s;
+  }
+  .btn:hover{background:linear-gradient(180deg,#1d3966,#101e38);color:#eaf4ff;border-color:#5b93e0;}
+  .btn:active{transform:scale(.985);}
+  .btn.ghost{background:transparent;border-color:#22314d;color:#7d97bd;}
+  .btn.ghost:hover{background:rgba(30,50,90,.3);color:#c0d6f8;}
+  .hint{font-size:11px;color:#4e6386;letter-spacing:1.5px;line-height:1.9;margin-top:22px;}
+  .hint b{color:#8fb0e0;font-weight:normal;}
+  .big{
+    font-size:clamp(26px,7vw,46px);letter-spacing:9px;font-weight:bold;margin-bottom:12px;
+  }
+  .win .big{color:#8fffc4;text-shadow:0 0 22px #12ff8a,0 0 50px #008844;}
+  .lose .big{color:#ff6a6a;text-shadow:0 0 22px #ff2020,0 0 50px #901010;}
+  .sub{font-size:12px;letter-spacing:3px;color:#7f93b6;margin-bottom:26px;line-height:2;}
+  .stat{color:#c8dcff;}
+
+  /* ---------------- Touch ---------------- */
+  #touch{position:absolute;inset:0;pointer-events:none;display:none;z-index:10;}
+  #touch.on{display:block;}
+  #stick{
+    position:absolute;width:130px;height:130px;border-radius:50%;
+    border:2px solid rgba(90,140,220,.35);background:rgba(20,34,62,.22);
+    display:none;pointer-events:none;
+  }
+  #knob{
+    position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;
+    border-radius:50%;background:rgba(110,170,255,.35);
+    border:2px solid rgba(150,200,255,.6);
+  }
+  #fireBtn{
+    position:absolute;right:22px;bottom:100px;width:96px;height:96px;border-radius:50%;
+    background:radial-gradient(circle at 40% 35%,rgba(255,90,60,.5),rgba(140,20,10,.5));
+    border:2px solid rgba(255,130,90,.6);color:#ffd9cc;font-family:inherit;
+    font-size:12px;letter-spacing:2px;pointer-events:auto;cursor:pointer;
+  }
+  #fireBtn:active{background:radial-gradient(circle at 40% 35%,rgba(255,140,100,.85),rgba(200,40,20,.85));}
+  #lookPad{position:absolute;right:0;top:0;width:60%;height:78%;pointer-events:auto;}
+  #movePad{position:absolute;left:0;bottom:0;width:52%;height:62%;pointer-events:auto;}
+</style>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<div id="hud">
+  <div id="waveLbl">WAVE 1 / 3</div>
+  <div id="hpWrap"><div id="hpFill"></div><div id="hpTxt">100</div></div>
+  <div id="ammoWrap">AMMO<span id="ammoNum">50</span></div>
+  <div id="cross"></div>
+</div>
+
+<button id="muteBtn" title="Toggle sound" aria-label="Mute sound">SOUND: ON</button>
+
+<div id="touch">
+  <div id="lookPad"></div>
+  <div id="movePad"></div>
+  <div id="stick"><div id="knob"></div></div>
+  <button id="fireBtn">FIRE</button>
+</div>
+
+<div id="overlay"></div>
+
+<script>
+(function () {
+"use strict";
+
+/* =========================================================================
+   0. UTILITIES
+   ========================================================================= */
+var TAU = Math.PI * 2;
+function clamp(v, a, b) { return v < a ? a : (v > b ? b : v); }
+function normAngle(a) {
+  a = a % TAU;
+  if (a > Math.PI) a -= TAU;
+  if (a < -Math.PI) a += TAU;
+  return a;
+}
+function lerpAngle(a, b, t) { return a + normAngle(b - a) * t; }
+function pk(r, g, b) {
+  r = r < 0 ? 0 : (r > 255 ? 255 : r | 0);
+  g = g < 0 ? 0 : (g > 255 ? 255 : g | 0);
+  b = b < 0 ? 0 : (b > 255 ? 255 : b | 0);
+  return (255 << 24) | (b << 16) | (g << 8) | r;
+}
+function mulberry32(a) {
+  return function () {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    var t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/* =========================================================================
+   1. WORLD CONSTANTS
+   ========================================================================= */
+var MAP_W = 24, MAP_H = 24;
+var HE = 1.7;      // eye height
+var WH = 4.0;      // wall / ceiling height
+var PLAYER_SPEED = 4.2;
+var PLAYER_RADIUS = 0.30;
+var MAX_WAVES = 3;
+
+var map = new Uint8Array(MAP_W * MAP_H);
+
+/* =========================================================================
+   2. PROCEDURAL TEXTURES
+   ========================================================================= */
+var TS = 64;
+
+function makeTex(fn) {
+  var d = new Uint32Array(TS * TS);
+  for (var y = 0; y < TS; y++) {
+    for (var x = 0; x < TS; x++) {
+      d[y * TS + x] = fn(x, y);
+    }
+  }
+  return d;
+}
+
+var brickTex = (function () {
+  var rnd = mulberry32(9182);
+  return makeTex(function (x, y) {
+    var row = (y / 16) | 0;
+    var off = (row % 2) ? 16 : 0;
+    var bx = (x + off) % 32, by = y % 16;
+    if (bx < 2 || by < 2) {
+      var m = (rnd() - 0.5) * 12;
+      return pk(41 + m, 36 + m, 33 + m);
+    }
+    var n = (rnd() - 0.5) * 22;
+    var r = 116 + n, g = 57 + n * 0.6, b = 45 + n * 0.5;
+    if (by < 4) { r += 16; g += 9; b += 7; }
+    if (by > 12) { r -= 18; g -= 11; b -= 9; }
+    if (x % 32 < 3) { r -= 10; g -= 8; b -= 6; }
+    return pk(r, g, b);
+  });
+})();
+
+var stoneTex = (function () {
+  var rnd = mulberry32(4477);
+  return makeTex(function (x, y) {
+    var n = (rnd() - 0.5) * 26;
+    var base = 84 + n;
+    var groove = Math.abs(((x % 21) - 10)) < 3 ? -22 : 0;
+    var band = (y % 32 < 2) ? -26 : 0;
+    var v = base + groove + band;
+    return pk(v * 1.02, v * 1.04, v * 1.16);
+  });
+})();
+
+var floorTex = (function () {
+  var rnd = mulberry32(1337);
+  return makeTex(function (x, y) {
+    var cx = (x / 32) | 0, cy = (y / 32) | 0;
+    var checker = (cx + cy) & 1;
+    var n = (rnd() - 0.5) * 16;
+    var gx = (x % 32 < 2) || (y % 32 < 2);
+    if (gx) return pk(20 + n, 20 + n, 26 + n);
+    var v = (checker ? 52 : 38) + n;
+    return pk(v * 0.92, v * 0.95, v * 1.12);
+  });
+})();
+
+var ceilTex = (function () {
+  var rnd = mulberry32(777);
+  return makeTex(function (x, y) {
+    var n = (rnd() - 0.5) * 12;
+    var gx = (x % 32 < 2) || (y % 32 < 2);
+    var rivet = ((x % 32 === 16) && (y % 32 === 16)) ? 30 : 0;
+    var v = gx ? 22 + n : 34 + n;
+    return pk(v + rivet, v * 1.02 + rivet, v * 1.18 + rivet);
+  });
+})();
+
+/* portal energy fields — 8 animation frames each */
+function makePortalFrames(c1, c2) {
+  var out = [];
+  for (var f = 0; f < 8; f++) {
+    var ph = f / 8 * TAU;
+    out.push(makeTex(function (x, y) {
+      var u = x / TS * 2 - 1;
+      var v = y / TS * 2 - 1;
+      var r = Math.sqrt(u * u + v * v * 0.55);
+      var ang = Math.atan2(v, u);
+      var swirl = Math.sin(ang * 3 + ph + r * 11 - ph * 0.7) * 0.5 + 0.5;
+      var ring = Math.sin(r * 18 - ph * 3.0) * 0.5 + 0.5;
+      var k = swirl * 0.58 + ring * 0.42;
+      k *= Math.max(0, 1 - r * 0.82);
+      var edge = Math.max(0, 1 - Math.abs(r - 0.90) * 7);
+      k = k * 0.85 + edge * 0.55;
+      if (k > 1) k = 1;
+      var core = Math.max(0, 1 - r * 3.2);
+      var rr = c1[0] + (c2[0] - c1[0]) * k + core * 150;
+      var gg = c1[1] + (c2[1] - c1[1]) * k + core * 150;
+      var bb = c1[2] + (c2[2] - c1[2]) * k + core * 160;
+      return pk(rr, gg, bb);
+    }));
+  }
+  return out;
+}
+var portalAnims = [
+  makePortalFrames([8, 26, 78], [90, 190, 255]),   // cool / blue
+  makePortalFrames([70, 20, 4], [255, 170, 60])    // warm / amber
+];
+
+/* =========================================================================
+   3. SPRITE ATLASES
+   ========================================================================= */
+function makeSprite(w, h, draw) {
+  var c = document.createElement("canvas");
+  c.width = w; c.height = h;
+  var g = c.getContext("2d");
+  g.clearRect(0, 0, w, h);
+  draw(g, w, h);
+  var id = g.getImageData(0, 0, w, h);
+  return { w: w, h: h, data: new Uint32Array(id.data.buffer) };
+}
+
+var gruntSprite = makeSprite(64, 96, function (g, w, h) {
+  var cx = w / 2;
+  // legs
+  g.fillStyle = "#3a1113";
+  g.beginPath(); g.moveTo(cx - 17, h - 2); g.lineTo(cx - 5, h - 2);
+  g.lineTo(cx - 4, h - 42); g.lineTo(cx - 15, h - 44); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(cx + 17, h - 2); g.lineTo(cx + 5, h - 2);
+  g.lineTo(cx + 4, h - 42); g.lineTo(cx + 15, h - 44); g.closePath(); g.fill();
+  // hooves
+  g.fillStyle = "#1a0808";
+  g.fillRect(cx - 19, h - 8, 16, 8);
+  g.fillRect(cx + 3, h - 8, 16, 8);
+  // torso
+  var grd = g.createLinearGradient(0, h * 0.26, 0, h * 0.74);
+  grd.addColorStop(0, "#a8352a"); grd.addColorStop(0.55, "#7a1f18"); grd.addColorStop(1, "#3f0d0c");
+  g.fillStyle = grd;
+  g.beginPath();
+  g.moveTo(cx - 21, h * 0.30); g.lineTo(cx + 21, h * 0.30);
+  g.lineTo(cx + 17, h * 0.60); g.lineTo(cx - 17, h * 0.60);
+  g.closePath(); g.fill();
+  // ribs
+  g.strokeStyle = "rgba(20,4,4,0.55)"; g.lineWidth = 2;
+  for (var i = 0; i < 3; i++) {
+    g.beginPath();
+    g.moveTo(cx - 13, h * 0.38 + i * 8);
+    g.lineTo(cx + 13, h * 0.38 + i * 8);
+    g.stroke();
+  }
+  // arms
+  g.fillStyle = "#8a271f";
+  g.beginPath(); g.moveTo(cx - 20, h * 0.31); g.lineTo(cx - 32, h * 0.46);
+  g.lineTo(cx - 27, h * 0.52); g.lineTo(cx - 17, h * 0.40); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(cx + 20, h * 0.31); g.lineTo(cx + 32, h * 0.46);
+  g.lineTo(cx + 27, h * 0.52); g.lineTo(cx + 17, h * 0.40); g.closePath(); g.fill();
+  // claws
+  g.fillStyle = "#e6d6b4";
+  for (var k = 0; k < 3; k++) {
+    g.beginPath(); g.arc(cx - 31 + k * 3, h * 0.54, 2.4, 0, TAU); g.fill();
+    g.beginPath(); g.arc(cx + 25 + k * 3, h * 0.54, 2.4, 0, TAU); g.fill();
+  }
+  // head
+  g.fillStyle = "#b84a35";
+  g.beginPath(); g.arc(cx, h * 0.22, 15, 0, TAU); g.fill();
+  g.fillStyle = "#8f2f22";
+  g.beginPath(); g.arc(cx, h * 0.24, 15, 0.2, Math.PI - 0.2); g.fill();
+  // horns
+  g.fillStyle = "#efe2c6";
+  g.beginPath(); g.moveTo(cx - 13, h * 0.15); g.lineTo(cx - 22, h * 0.02);
+  g.lineTo(cx - 8, h * 0.11); g.closePath(); g.fill();
+  g.beginPath(); g.moveTo(cx + 13, h * 0.15); g.lineTo(cx + 22, h * 0.02);
+  g.lineTo(cx + 8, h * 0.11); g.closePath(); g.fill();
+  // eyes
+  g.shadowColor = "#ffbb00"; g.shadowBlur = 10;
+  g.fillStyle = "#ffe98a";
+  g.beginPath(); g.arc(cx - 6, h * 0.21, 3.4, 0, TAU); g.fill();
+  g.beginPath(); g.arc(cx + 6, h * 0.21, 3.4, 0, TAU); g.fill();
+  g.shadowBlur = 0;
+  // maw
+  g.fillStyle = "#2a0404";
+  g.beginPath(); g.ellipse(cx, h * 0.29, 6, 3.5, 0, 0, TAU); g.fill();
+  g.fillStyle = "#e8e0cc";
+  g.fillRect(cx - 5, h * 0.275, 2, 4);
+  g.fillRect(cx + 3, h * 0.275, 2, 4);
+});
+
+var casterSprite = makeSprite(64, 96, function (g, w, h) {
+  var cx = w / 2;
+  // robe
+  var grd = g.createLinearGradient(0, h * 0.25, 0, h);
+  grd.addColorStop(0, "#6b3fa8"); grd.addColorStop(0.6, "#3d1f6b"); grd.addColorStop(1, "#1a0b30");
+  g.fillStyle = grd;
+  g.beginPath();
+  g.moveTo(cx - 24, h - 2); g.lineTo(cx + 24, h - 2);
+  g.lineTo(cx + 13, h * 0.34); g.lineTo(cx - 13, h * 0.34);
+  g.closePath(); g.fill();
+  // robe trim
+  g.strokeStyle = "rgba(180,140,255,0.55)"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(cx - 18, h * 0.92); g.lineTo(cx + 18, h * 0.92); g.stroke();
+  // hood
+  g.fillStyle = "#291344";
+  g.beginPath();
+  g.moveTo(cx - 17, h * 0.36); g.quadraticCurveTo(cx, h * 0.04, cx + 17, h * 0.36);
+  g.quadraticCurveTo(cx, h * 0.46, cx - 17, h * 0.36);
+  g.closePath(); g.fill();
+  // face void
+  g.fillStyle = "#07030f";
+  g.beginPath(); g.ellipse(cx, h * 0.24, 9, 11, 0, 0, TAU); g.fill();
+  // eyes
+  g.shadowColor = "#b46bff"; g.shadowBlur = 12;
+  g.fillStyle = "#e0b8ff";
+  g.beginPath(); g.arc(cx - 4, h * 0.235, 2.4, 0, TAU); g.fill();
+  g.beginPath(); g.arc(cx + 4, h * 0.235, 2.4, 0, TAU); g.fill();
+  g.shadowBlur = 0;
+  // orb
+  var og = g.createRadialGradient(cx + 20, h * 0.46, 1, cx + 20, h * 0.46, 12);
+  og.addColorStop(0, "#ffffff"); og.addColorStop(0.35, "#c98bff");
+  og.addColorStop(0.75, "#6b28b8"); og.addColorStop(1, "rgba(60,10,110,0)");
+  g.fillStyle = og;
+  g.beginPath(); g.arc(cx + 20, h * 0.46, 12, 0, TAU); g.fill();
+  // sleeve
+  g.fillStyle = "#43216e";
+  g.beginPath(); g.moveTo(cx + 6, h * 0.42); g.lineTo(cx + 26, h * 0.50);
+  g.lineTo(cx + 20, h * 0.60); g.lineTo(cx + 4, h * 0.56); g.closePath(); g.fill();
+});
+
+var healthSprite = makeSprite(48, 48, function (g, w, h) {
+  g.fillStyle = "rgba(0,0,0,0)"; g.clearRect(0, 0, w, h);
+  var grd = g.createLinearGradient(0, 8, 0, 42);
+  grd.addColorStop(0, "#f2f6ff"); grd.addColorStop(1, "#a8b6cc");
+  g.fillStyle = grd;
+  g.fillRect(10, 12, 28, 24);
+  g.strokeStyle = "#5b6b86"; g.lineWidth = 2;
+  g.strokeRect(10, 12, 28, 24);
+  g.shadowColor = "#ff2a2a"; g.shadowBlur = 12;
+  g.fillStyle = "#e82828";
+  g.fillRect(21, 16, 6, 16);
+  g.fillRect(16, 21, 16, 6);
+  g.shadowBlur = 0;
+  g.fillStyle = "rgba(255,255,255,0.55)";
+  g.fillRect(10, 12, 28, 3);
+});
+
+var ammoSprite = makeSprite(48, 48, function (g, w, h) {
+  g.clearRect(0, 0, w, h);
+  var grd = g.createLinearGradient(0, 12, 0, 42);
+  grd.addColorStop(0, "#6b6a3a"); grd.addColorStop(1, "#3a3a18");
+  g.fillStyle = grd;
+  g.fillRect(8, 14, 32, 24);
+  g.strokeStyle = "#8f8f4a"; g.lineWidth = 2;
+  g.strokeRect(8, 14, 32, 24);
+  g.fillStyle = "#d9c25a";
+  for (var i = 0; i < 4; i++) {
+    g.fillRect(12 + i * 7, 18, 4, 14);
+    g.beginPath(); g.arc(14 + i * 7, 18, 2.4, 0, TAU); g.fill();
+  }
+  g.fillStyle = "rgba(255,240,160,0.45)";
+  g.fillRect(8, 14, 32, 3);
+});
+
+var boltSprite = makeSprite(24, 24, function (g, w, h) {
+  g.clearRect(0, 0, w, h);
+  var grd = g.createRadialGradient(12, 12, 1, 12, 12, 11);
+  grd.addColorStop(0, "#ffffff");
+  grd.addColorStop(0.3, "#c98bff");
+  grd.addColorStop(0.7, "#7a2ed0");
+  grd.addColorStop(1, "rgba(60,0,120,0)");
+  g.fillStyle = grd;
+  g.beginPath(); g.arc(12, 12, 11, 0, TAU); g.fill();
+});
+
+/* =========================================================================
+   4. MAP BUILD
+   ========================================================================= */
+function buildMap() {
+  map.fill(0);
+  for (var y = 0; y < MAP_H; y++) {
+    for (var x = 0; x < MAP_W; x++) {
+      if (x === 0 || y === 0 || x === MAP_W - 1 || y === MAP_H - 1) {
+        map[y * MAP_W + x] = 1;
+      }
+    }
+  }
+  var pillars = [[6, 6], [16, 6], [6, 16], [16, 16], [11, 11]];
+  for (var p = 0; p < pillars.length; p++) {
+    var px = pillars[p][0], py = pillars[p][1];
+    for (var dy = 0; dy < 2; dy++) {
+      for (var dx = 0; dx < 2; dx++) {
+        map[(py + dy) * MAP_W + (px + dx)] = 2;
+      }
+    }
+  }
+}
+buildMap();
+
+function solidAt(x, z) {
+  var mx = x | 0, mz = z | 0;
+  if (mx < 0 || mz < 0 || mx >= MAP_W || mz >= MAP_H) return true;
+  return map[mz * MAP_W + mx] !== 0;
+}
+function collides(x, z, r) {
+  var x0 = Math.floor(x - r), x1 = Math.floor(x + r);
+  var z0 = Math.floor(z - r), z1 = Math.floor(z + r);
+  for (var cz = z0; cz <= z1; cz++) {
+    for (var cx = x0; cx <= x1; cx++) {
+      if (cx < 0 || cz < 0 || cx >= MAP_W || cz >= MAP_H) return true;
+      if (map[cz * MAP_W + cx]) return true;
+    }
+  }
+  return false;
+}
+
+/* =========================================================================
+   5. PORTALS
+   ========================================================================= */
+var portals = [];
+function makePortal(cx, cz, nx, nz, slot) {
+  var p = {
+    cx: cx, cz: cz,
+    nx: nx, nz: nz,
+    rx: -nz, rz: nx,        // right-hand vector along the wall plane
+    halfW: 0.95,
+    slot: slot,
+    theta: 0, other: null
+  };
+  return p;
+}
+function buildPortals() {
+  // opposite walls: north face (y=1, normal +y) and south face (y=23, normal -y)
+  var A = makePortal(12.0, 1.0, 0, 1, 0);
+  var B = makePortal(12.0, 23.0, 0, -1, 1);
+  A.other = B; B.other = A;
+  // rotation taking -n(this) to n(other)  -- general 2D portal transform
+  A.theta = Math.atan2(B.nz, B.nx) - Math.atan2(-A.nz, -A.nx);
+  B.theta = Math.atan2(A.nz, A.nx) - Math.atan2(-B.nz, -B.nx);
+  portals = [A, B];
+}
+buildPortals();
+
+/* =========================================================================
+   6. AUDIO — procedural music + sfx
+   ========================================================================= */
+var Audio2 = {
+  ctx: null, master: null, musicGain: null, sfxGain: null,
+  muted: false, playing: false, step: 0, next: 0, timer: null, bpm: 100,
+
+  init: function () {
+    if (this.ctx) return;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try { this.ctx = new AC(); } catch (e) { this.ctx = null; return; }
+    this.master = this.ctx.createGain();
+    this.master.gain.value = this.muted ? 0 : 0.9;
+    this.master.connect(this.ctx.destination);
+
+    this.musicGain = this.ctx.createGain();
+    this.musicGain.gain.value = 0;
+    this.musicGain.connect(this.master);
+
+    this.sfxGain = this.ctx.createGain();
+    this.sfxGain.gain.value = 0.55;
+    this.sfxGain.connect(this.master);
+  },
+
+  resume: function () {
+    this.init();
+    if (this.ctx && this.ctx.state === "suspended") { this.ctx.resume(); }
+  },
+
+  setMuted: function (m) {
+    this.muted = m;
+    if (this.master) {
+      this.master.gain.setTargetAtTime(m ? 0 : 0.9, this.ctx.currentTime, 0.05);
+    }
+  },
+
+  /* ---- music ---- */
+  startMusic: function () {
+    this.init();
+    if (!this.ctx || this.playing) return;
+    this.playing = true;
+    this.step = 0;
+    this.next = this.ctx.currentTime + 0.12;
+    var g = this.musicGain.gain;
+    g.cancelScheduledValues(this.ctx.currentTime);
+    g.setValueAtTime(0.0001, this.ctx.currentTime);
+    g.exponentialRampToValueAtTime(0.34, this.ctx.currentTime + 2.5);
+    var self = this;
+    if (this.timer) clearInterval(this.timer);
+    this.timer = setInterval(function () { self.tick(); }, 25);
+  },
+
+  tick: function () {
+    if (!this.playing || !this.ctx) return;
+    var stepDur = 60 / this.bpm / 4;
+    var now = this.ctx.currentTime;
+    var guard = 0;
+    while (this.next < now + 0.22 && guard++ < 40) {
+      this.playStep(this.step, this.next);
+      this.step = (this.step + 1) & 63;
+      this.next += stepDur;
+    }
+  },
+
+  playStep: function (s, t) {
+    var i = s & 15;
+    var bar = (s >> 4) & 3;
+    // ---- kick
+    var kick = [1,0,0,0, 0,0,1,0, 1,0,0,0, 0,0,1,0];
+    if (kick[i]) this.kick(t);
+    // ---- hat
+    var hat = [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,1,1,1];
+    if (hat[i]) this.hat(t, i === 15 ? 0.10 : 0.055);
+    // ---- snare on beat 3
+    if (i === 8 && (bar & 1) === 1) this.snare(t);
+    // ---- bass
+    var bassPat = [0,-1,0,-1, 7,-1,-1,3, 0,-1,0,-1, 5,-1,3,-1];
+    if (bassPat[i] >= 0) this.bass(t, 55 * Math.pow(2, bassPat[i] / 12), 0.26);
+    // ---- arp (comes in after 1 bar)
+    if (bar >= 1) {
+      var arpPat = [12,15,19,15, 12,19,22,19, 10,14,17,14, 12,17,19,22];
+      if ((i & 1) === 0) {
+        this.arp(t, 220 * Math.pow(2, (arpPat[i] - 12) / 12), 0.09);
+      }
+    }
+    // ---- pad swell every 2 bars
+    if (s % 32 === 0) {
+      this.pad(t, 55 * Math.pow(2, (bar === 0 ? 0 : bar === 1 ? 3 : bar === 2 ? 5 : 3) / 12), 3.6);
+    }
+  },
+
+  kick: function (t) {
+    var c = this.ctx;
+    var o = c.createOscillator(), g = c.createGain();
+    o.type = "sine";
+    o.frequency.setValueAtTime(128, t);
+    o.frequency.exponentialRampToValueAtTime(38, t + 0.13);
+    g.gain.setValueAtTime(0.85, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+    o.connect(g); g.connect(this.musicGain);
+    o.start(t); o.stop(t + 0.24);
+  },
+
+  hat: function (t, v) {
+    var c = this.ctx;
+    var len = 0.055;
+    var buf = c.createBuffer(1, Math.ceil(c.sampleRate * len), c.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    var src = c.createBufferSource(); src.buffer = buf;
+    var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 7200;
+    var g = c.createGain();
+    g.gain.setValueAtTime(v, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + len);
+    src.connect(hp); hp.connect(g); g.connect(this.musicGain);
+    src.start(t); src.stop(t + len);
+  },
+
+  snare: function (t) {
+    var c = this.ctx;
+    var len = 0.18;
+    var buf = c.createBuffer(1, Math.ceil(c.sampleRate * len), c.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 2);
+    var src = c.createBufferSource(); src.buffer = buf;
+    var bp = c.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 1900; bp.Q.value = 0.8;
+    var g = c.createGain(); g.gain.value = 0.30;
+    src.connect(bp); bp.connect(g); g.connect(this.musicGain);
+    src.start(t); src.stop(t + len);
+  },
+
+  bass: function (t, f, dur) {
+    var c = this.ctx;
+    var o = c.createOscillator(), o2 = c.createOscillator();
+    o.type = "sawtooth"; o2.type = "square";
+    o.frequency.value = f; o2.frequency.value = f * 0.5;
+    var lp = c.createBiquadFilter();
+    lp.type = "lowpass"; lp.Q.value = 6;
+    lp.frequency.setValueAtTime(320, t);
+    lp.frequency.exponentialRampToValueAtTime(900, t + 0.05);
+    lp.frequency.exponentialRampToValueAtTime(220, t + dur);
+    var g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.30, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(lp); o2.connect(lp); lp.connect(g); g.connect(this.musicGain);
+    o.start(t); o2.start(t);
+    o.stop(t + dur + 0.05); o2.stop(t + dur + 0.05);
+  },
+
+  arp: function (t, f, dur) {
+    var c = this.ctx;
+    var o = c.createOscillator();
+    o.type = "triangle";
+    o.frequency.value = f;
+    var lp = c.createBiquadFilter();
+    lp.type = "lowpass"; lp.frequency.value = 2600;
+    var g = c.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(0.075, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(lp); lp.connect(g); g.connect(this.musicGain);
+    o.start(t); o.stop(t + dur + 0.03);
+  },
+
+  pad: function (t, f, dur) {
+    var c = this.ctx;
+    for (var k = 0; k < 2; k++) {
+      var o = c.createOscillator();
+      o.type = "sawtooth";
+      o.frequency.value = f * (k === 0 ? 1 : 1.007) * 2;
+      var lp = c.createBiquadFilter();
+      lp.type = "lowpass"; lp.Q.value = 2;
+      lp.frequency.setValueAtTime(400, t);
+      lp.frequency.linearRampToValueAtTime(1200, t + dur * 0.6);
+      lp.frequency.linearRampToValueAtTime(500, t + dur);
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(0.045, t + dur * 0.35);
+      g.gain.linearRampToValueAtTime(0.0001, t + dur);
+      o.connect(lp); lp.connect(g); g.connect(this.musicGain);
+      o.start(t); o.stop(t + dur + 0.1);
+    }
+  },
+
+  /* ---- sfx ---- */
+  sfx: function (name) {
+    if (!this.ctx || this.muted) return;
+    var c = this.ctx, t = c.currentTime, out = this.sfxGain;
+    function env(g, a, d, peak) {
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.linearRampToValueAtTime(peak, t + a);
+      g.gain.exponentialRampToValueAtTime(0.0008, t + a + d);
+    }
+    if (name === "shoot") {
+      var o = c.createOscillator(); o.type = "square";
+      o.frequency.setValueAtTime(760, t);
+      o.frequency.exponentialRampToValueAtTime(90, t + 0.09);
+      var g = c.createGain(); env(g, 0.003, 0.10, 0.16);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t + 0.14);
+      var nb = this._noise(0.07);
+      var hp = c.createBiquadFilter(); hp.type = "highpass"; hp.frequency.value = 1800;
+      var ng = c.createGain(); env(ng, 0.002, 0.07, 0.13);
+      nb.connect(hp); hp.connect(ng); ng.connect(out); nb.start(t);
+    } else if (name === "hit") {
+      var o2 = c.createOscillator(); o2.type = "square";
+      o2.frequency.setValueAtTime(320, t);
+      o2.frequency.exponentialRampToValueAtTime(140, t + 0.07);
+      var g2 = c.createGain(); env(g2, 0.002, 0.07, 0.12);
+      o2.connect(g2); g2.connect(out); o2.start(t); o2.stop(t + 0.1);
+    } else if (name === "die") {
+      var o3 = c.createOscillator(); o3.type = "sawtooth";
+      o3.frequency.setValueAtTime(280, t);
+      o3.frequency.exponentialRampToValueAtTime(45, t + 0.42);
+      var g3 = c.createGain(); env(g3, 0.005, 0.42, 0.20);
+      o3.connect(g3); g3.connect(out); o3.start(t); o3.stop(t + 0.5);
+    } else if (name === "hurt") {
+      var o4 = c.createOscillator(); o4.type = "sawtooth";
+      o4.frequency.setValueAtTime(180, t);
+      o4.frequency.exponentialRampToValueAtTime(60, t + 0.22);
+      var g4 = c.createGain(); env(g4, 0.004, 0.22, 0.26);
+      o4.connect(g4); g4.connect(out); o4.start(t); o4.stop(t + 0.28);
+    } else if (name === "pickup") {
+      var notes = [660, 880, 1320];
+      for (var i = 0; i < notes.length; i++) {
+        var oo = c.createOscillator(); oo.type = "triangle";
+        oo.frequency.value = notes[i];
+        var gg = c.createGain();
+        gg.gain.setValueAtTime(0.0001, t + i * 0.05);
+        gg.gain.linearRampToValueAtTime(0.11, t + i * 0.05 + 0.01);
+        gg.gain.exponentialRampToValueAtTime(0.0006, t + i * 0.05 + 0.14);
+        oo.connect(gg); gg.connect(out);
+        oo.start(t + i * 0.05); oo.stop(t + i * 0.05 + 0.18);
+      }
+    } else if (name === "portal") {
+      var o5 = c.createOscillator(); o5.type = "sine";
+      o5.frequency.setValueAtTime(220, t);
+      o5.frequency.exponentialRampToValueAtTime(1400, t + 0.18);
+      o5.frequency.exponentialRampToValueAtTime(180, t + 0.5);
+      var g5 = c.createGain(); env(g5, 0.01, 0.5, 0.22);
+      o5.connect(g5); g5.connect(out); o5.start(t); o5.stop(t + 0.56);
+      var nb2 = this._noise(0.42);
+      var bp = c.createBiquadFilter(); bp.type = "bandpass";
+      bp.frequency.setValueAtTime(500, t);
+      bp.frequency.exponentialRampToValueAtTime(4200, t + 0.4);
+      bp.Q.value = 1.6;
+      var ng2 = c.createGain(); env(ng2, 0.02, 0.4, 0.16);
+      nb2.connect(bp); bp.connect(ng2); ng2.connect(out); nb2.start(t);
+    } else if (name === "wave") {
+      var chords = [110, 165, 220];
+      for (var j = 0; j < chords.length; j++) {
+        var oc = c.createOscillator(); oc.type = "sawtooth";
+        oc.frequency.value = chords[j];
+        var lp = c.createBiquadFilter(); lp.type = "lowpass"; lp.frequency.value = 1400;
+        var gc = c.createGain();
+        gc.gain.setValueAtTime(0.0001, t + j * 0.06);
+        gc.gain.linearRampToValueAtTime(0.10, t + j * 0.06 + 0.04);
+        gc.gain.exponentialRampToValueAtTime(0.0008, t + j * 0.06 + 0.7);
+        oc.connect(lp); lp.connect(gc); gc.connect(out);
+        oc.start(t + j * 0.06); oc.stop(t + j * 0.06 + 0.8);
+      }
+    } else if (name === "empty") {
+      var oe = c.createOscillator(); oe.type = "square";
+      oe.frequency.value = 150;
+      var ge = c.createGain(); env(ge, 0.002, 0.05, 0.10);
+      oe.connect(ge); ge.connect(out); oe.start(t); oe.stop(t + 0.07);
+    }
+  },
+
+  _noise: function (dur) {
+    var c = this.ctx;
+    var len = Math.ceil(c.sampleRate * dur);
+    var buf = c.createBuffer(1, len, c.sampleRate);
+    var d = buf.getChannelData(0);
+    for (var i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    var src = c.createBufferSource(); src.buffer = buf;
+    return src;
+  }
+};
+
+/* =========================================================================
+   7. GAME STATE
+   ========================================================================= */
+var canvas = document.getElementById("view");
+var ctx = canvas.getContext("2d", { alpha: false });
+var W = 320, H = 200;
+var imgData = null, buf32 = null, zbuf = null;
+var planeLen = 0.89;
+var isTouch = ("ontouchstart" in window) ||
+  (window.matchMedia && window.matchMedia("(pointer: coarse)").matches);
+var perfScale = 1;
+
+var player = {
+  x: 12.0, z: 20.0, yaw: -Math.PI / 2, pitch: 0,
+  health: 100, maxHealth: 100, ammo: 50,
+  fireCd: 0, hurtFlash: 0, muzzle: 0, portalCd: 0, bob: 0
+};
+
+var enemies = [];
+var bullets = [];
+var pickups = [];
+var particles = [];
+
+var state = {
+  mode: "title",       // title | playing | win | over
+  demo: false,
+  wave: 0,
+  spawnQueue: [],
+  spawnTimer: 0,
+  waveClearT: 0,
+  time: 0,
+  shake: 0,
+  demoPortalUsed: false
+};
+
+var input = { forward: 0, strafe: 0, fire: false, turn: 0 };
+var mouseDown = false;
+var keys = {};
+
+/* =========================================================================
+   8. CANVAS SIZE
+   ========================================================================= */
+function resize() {
+  var cw = window.innerWidth, ch = window.innerHeight;
+  var baseW = (isTouch ? 340 : 500) * perfScale;
+  var w = Math.round(baseW);
+  var h = Math.round(w * ch / cw);
+  var maxPix = (isTouch ? 105000 : 200000) * perfScale * perfScale;
+  if (w * h > maxPix) {
+    var s = Math.sqrt(maxPix / (w * h));
+    w = Math.round(w * s); h = Math.round(h * s);
+  }
+  w = Math.max(140, w); h = Math.max(90, h);
+  W = w; H = h;
+  canvas.width = W; canvas.height = H;
+  ctx.imageSmoothingEnabled = false;
+  imgData = ctx.createImageData(W, H);
+  buf32 = new Uint32Array(imgData.data.buffer);
+  zbuf = new Float32Array(W);
+  planeLen = clamp(0.5 * W / H, 0.55, 1.2);
+}
+window.addEventListener("resize", resize);
+window.addEventListener("orientationchange", function () {
+  setTimeout(resize, 120);
+});
+
+/* =========================================================================
+   9. PICKUPS
+   ========================================================================= */
+var PICKUP_SPOTS = [
+  { x: 4.5, z: 12.0, type: "health" },
+  { x: 19.5, z: 12.0, type: "health" },
+  { x: 12.0, z: 6.5, type: "health" },
+  { x: 12.0, z: 17.5, type: "health" },
+  { x: 4.5, z: 4.5, type: "ammo" },
+  { x: 19.5, z: 4.5, type: "ammo" },
+  { x: 4.5, z: 19.5, type: "ammo" },
+  { x: 19.5, z: 19.5, type: "ammo" }
+];
+
+function initPickups() {
+  pickups = [];
+  for (var i = 0; i < PICKUP_SPOTS.length; i++) {
+    var s = PICKUP_SPOTS[i];
+    pickups.push({
+      x: s.x, z: s.z, type: s.type,
+      active: true, timer: 0, seed: i * 1.7,
+      tex: s.type === "health" ? healthSprite : ammoSprite,
+      sw: 0.7, sh: 0.7, z0: 0.35
+    });
+  }
+}
+
+function updatePickups(dt) {
+  for (var i = 0; i < pickups.length; i++) {
+    var p = pickups[i];
+    if (!p.active) {
+      p.timer -= dt;
+      if (p.timer <= 0) { p.active = true; }
+      continue;
+    }
+    var dx = p.x - player.x, dz = p.z - player.z;
+    var d2 = dx * dx + dz * dz;
+    if (d2 < 0.85 * 0.85) {
+      if (p.type === "health") {
+        if (player.health >= player.maxHealth) continue;
+        player.health = Math.min(player.maxHealth, player.health + 25);
+      } else {
+        if (player.ammo >= 120) continue;
+        player.ammo = Math.min(120, player.ammo + 25);
+      }
+      p.active = false;
+      p.timer = 13;
+      Audio2.sfx("pickup");
+      spawnParticles(p.x, p.z, 0.5, p.type === "health" ? "#ff5555" : "#ffdd66", 10);
+      updateHUD();
+    }
+  }
+}
+
+/* =========================================================================
+   10. PARTICLES
+   ========================================================================= */
+function spawnParticles(x, z, y, color, n) {
+  for (var i = 0; i < n; i++) {
+    var a = Math.random() * TAU, sp = 0.8 + Math.random() * 3;
+    particles.push({
+      x: x, z: z, y: y, vx: Math.cos(a) * sp, vz: Math.sin(a) * sp,
+      vy: 1.5 + Math.random() * 3, life: 0.5 + Math.random() * 0.5,
+      maxLife: 1, color: color, size: 0.06 + Math.random() * 0.08
+    });
+  }
+}
+function updateParticles(dt) {
+  for (var i = particles.length - 1; i >= 0; i--) {
+    var p = particles[i];
+    p.life -= dt;
+    if (p.life <= 0) { particles.splice(i, 1); continue; }
+    p.x += p.vx * dt; p.z += p.vz * dt;
+    p.y += p.vy * dt;
+    p.vy -= 9 * dt;
+    if (p.y < 0.03) { p.y = 0.03; p.vy *= -0.35; p.vx *= 0.6; p.vz *= 0.6; }
+  }
+}
+
+/* =========================================================================
+   11. PORTAL TRANSIT
+   ========================================================================= */
+function doTeleport(e, P, isPlayer) {
+  var Q = P.other;
+  var th = P.theta;
+  var c = Math.cos(th), s = Math.sin(th);
+
+  var dx = e.x - P.cx, dz = e.z - P.cz;
+  var rx = dx * c - dz * s;
+  var rz = dx * s + dz * c;
+
+  var nx = Q.cx + rx;
+  var nz = Q.cz + rz;
+
+  // guarantee a safe exit clearance from the destination wall plane
+  var nd = (nx - Q.cx) * Q.nx + (nz - Q.cz) * Q.nz;
+  var minOut = 0.62;
+  if (nd < minOut) {
+    nx += Q.nx * (minOut - nd);
+    nz += Q.nz * (minOut - nd);
+  }
+
+  e.x = nx; e.z = nz;
+  e.portalCd = 0.45;
+
+  if (typeof e.yaw === "number") e.yaw = e.yaw + th;
+  if (typeof e.vx === "number") {
+    var vx = e.vx * c - e.vz * s;
+    var vz = e.vx * s + e.vz * c;
+    e.vx = vx; e.vz = vz;
+  }
+  if (typeof e.aimYaw === "number") e.aimYaw += th;
+
+  Audio2.sfx("portal");
+  spawnParticles(nx, nz, 1.0, P.slot === 0 ? "#7fc4ff" : "#ffb060", 14);
+
+  if (isPlayer) {
+    state.shake = Math.max(state.shake, 0.25);
+    if (state.demo) state.demoPortalUsed = true;
+  }
+}
+
+/* generic portal-aware mover. vx/vz are world units per second. */
+function moveEntity(e, vx, vz, dt, r, isPlayer) {
+  if (e.portalCd > 0) e.portalCd -= dt;
+
+  if (e.portalCd <= 0) {
+    for (var i = 0; i < portals.length; i++) {
+      var P = portals[i];
+      var dx = e.x - P.cx, dz = e.z - P.cz;
+      var nd = dx * P.nx + dz * P.nz;
+      if (nd > 0 && nd < 0.68) {
+        var lat = dx * P.rx + dz * P.rz;
+        if (Math.abs(lat) < P.halfW + r * 0.4) {
+          var vn = vx * P.nx + vz * P.nz;
+          if (vn < -0.35) {
+            doTeleport(e, P, isPlayer);
+            return;
+          }
+        }
+      }
+    }
+  }
+
+  var nx = e.x + vx * dt;
+  if (!collides(nx, e.z, r)) e.x = nx;
+  var nz = e.z + vz * dt;
+  if (!collides(e.x, nz, r)) e.z = nz;
+}
+
+/* =========================================================================
+   12. LINE OF SIGHT / RAY HELPERS
+   ========================================================================= */
+function hasLOS(x0, z0, x1, z1) {
+  var dx = x1 - x0, dz = z1 - z0;
+  var dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist < 0.001) return true;
+  var steps = Math.ceil(dist * 5);
+  var sx = dx / steps, sz = dz / steps;
+  var x = x0, z = z0;
+  for (var i = 0; i < steps; i++) {
+    x += sx; z += sz;
+    if (solidAt(x, z)) return false;
+  }
+  return true;
+}
+
+function wallDistAlong(x, z, dx, dz, maxd) {
+  var step = 0.07, d = 0;
+  while (d < maxd) {
+    d += step;
+    if (solidAt(x + dx * d, z + dz * d)) return d;
+  }
+  return maxd;
+}
+
+/* =========================================================================
+   13. ENEMIES
+   ========================================================================= */
+var SPAWN_POINTS = [
+  [2.5, 2.5], [21.5, 2.5], [2.5, 21.5], [21.5, 21.5],
+  [12.0, 2.5], [2.5, 12.0], [21.5, 12.0], [12.0, 21.5]
+];
+
+function enemyDef(type) {
+  if (type === "caster") {
+    return {
+      hp: 5, speed: 1.55, tex: casterSprite, sw: 1.35, sh: 2.5,
+      melee: false, attackRange: 11.0, cooldown: 2.1, damage: 9,
+      radius: 0.55
+    };
+  }
+  return {
+    hp: 3, speed: 2.25, tex: gruntSprite, sw: 1.55, sh: 2.35,
+    melee: true, attackRange: 1.65, cooldown: 1.05, damage: 7,
+    radius: 0.58
+  };
+}
+
+function spawnEnemy(type) {
+  var best = null, bestD = -1;
+  for (var i = 0; i < SPAWN_POINTS.length; i++) {
+    var sp = SPAWN_POINTS[i];
+    var d = Math.hypot(sp[0] - player.x, sp[1] - player.z);
+    d += Math.random() * 3;
+    if (d > bestD) { bestD = d; best = sp; }
+  }
+  if (bestD < 5) best = SPAWN_POINTS[(Math.random() * SPAWN_POINTS.length) | 0];
+
+  var def = enemyDef(type);
+  var e = {
+    type: type, x: best[0], z: best[1],
+    hp: def.hp, maxHp: def.hp,
+    speed: def.speed, tex: def.tex, sw: def.sw, sh: def.sh,
+    melee: def.melee, attackRange: def.attackRange,
+    cooldown: def.cooldown, cd: 0.6 + Math.random() * 0.5,
+    damage: def.damage, radius: def.radius,
+    dead: false, deadT: 0, removed: false,
+    spawnT: 0.55, hitFlash: 0,
+    seed: Math.random() * 10,
+    vx: 0, vz: 0, portalCd: 0,
+    z0: 0, alpha: 1
+  };
+  enemies.push(e);
+  spawnParticles(e.x, e.z, 1.0, type === "caster" ? "#b46bff" : "#ff6644", 12);
+}
+
+function damageEnemy(e, dmg, kx, kz) {
+  if (e.dead) return;
+  e.hp -= dmg;
+  e.hitFlash = 0.13;
+  // physics: knockback impulse
+  if (kx !== undefined) {
+    e.vx += kx * 2.6;
+    e.vz += kz * 2.6;
+  }
+  spawnParticles(e.x, e.z, 1.2, "#ff4422", 4);
+  if (e.hp <= 0) {
+    e.dead = true;
+    e.deadT = 0;
+    Audio2.sfx("die");
+    spawnParticles(e.x, e.z, 1.1, "#ff7744", 16);
+  } else {
+    Audio2.sfx("hit");
+  }
+}
+
+function updateEnemies(dt) {
+  for (var i = enemies.length - 1; i >= 0; i--) {
+    var e = enemies[i];
+    if (e.removed) { enemies.splice(i, 1); continue; }
+
+    if (e.dead) {
+      e.deadT += dt;
+      // death slide from knockback
+      moveEntity(e, e.vx, e.vz, dt, 0.35, false);
+      e.vx *= Math.pow(0.02, dt);
+      e.vz *= Math.pow(0.02, dt);
+      if (e.deadT > 0.75) e.removed = true;
+      continue;
+    }
+    e.hitFlash = Math.max(0, e.hitFlash - dt);
+
+    if (e.spawnT > 0) {
+      e.spawnT -= dt;
+      e.alpha = 1 - e.spawnT / 0.55;
+      continue;
+    }
+    e.alpha = 1;
+
+    var dx = player.x - e.x, dz = player.z - e.z;
+    var dist = Math.sqrt(dx * dx + dz * dz) || 0.001;
+    var los = hasLOS(e.x, e.z, player.x, player.z);
+
+    // separation from other enemies
+    var sx = 0, sz = 0;
+    for (var j = 0; j < enemies.length; j++) {
+      if (j === i) continue;
+      var o = enemies[j];
+      if (o.dead || o.removed) continue;
+      var ox = e.x - o.x, oz = e.z - o.z;
+      var d2 = ox * ox + oz * oz;
+      if (d2 < 2.0 && d2 > 0.0001) {
+        var inv = 1 / Math.sqrt(d2);
+        var push = (1 - d2 / 2.0) * 2.2;
+        sx += ox * inv * push;
+        sz += oz * inv * push;
+      }
+    }
+
+    var vx = 0, vz = 0;
+    if (e.melee) {
+      if (dist > e.attackRange * 0.85 || !los) {
+        vx = (dx / dist) * e.speed;
+        vz = (dz / dist) * e.speed;
+      }
+    } else {
+      // caster: hold mid range
+      if (!los || dist > 9.5) {
+        vx = (dx / dist) * e.speed;
+        vz = (dz / dist) * e.speed;
+      } else if (dist < 4.5) {
+        vx = -(dx / dist) * e.speed;
+        vz = -(dz / dist) * e.speed;
+      } else {
+        vx = (-dz / dist) * e.speed * 0.7;
+        vz = (dx / dist) * e.speed * 0.7;
+      }
+    }
+
+    // blend in knockback velocity, decay it
+    vx += e.vx; vz += e.vz;
+    e.vx *= Math.pow(0.0015, dt);
+    e.vz *= Math.pow(0.0015, dt);
+    vx += sx; vz += sz;
+
+    moveEntity(e, vx, vz, dt, 0.33, false);
+
+    // attack
+    e.cd -= dt;
+    if (e.cd <= 0) {
+      if (e.melee) {
+        if (dist < e.attackRange && los) {
+          hurtPlayer(e.damage);
+          e.cd = e.cooldown;
+          spawnParticles(player.x, player.z, 1.2, "#ff2222", 6);
+        }
+      } else {
+        if (los && dist < e.attackRange) {
+          fireBolt(e, dx / dist, dz / dist);
+          e.cd = e.cooldown + Math.random() * 0.4;
+        }
+      }
+    }
+  }
+}
+
+function fireBolt(e, dx, dz) {
+  var sp = 7.2;
+  bullets.push({
+    x: e.x + dx * 0.6, z: e.z + dz * 0.6,
+    vx: dx * sp, vz: dz * sp,
+    life: 4.5, portalCd: 0.15,
+    tex: boltSprite, sw: 0.42, sh: 0.42, z0: 1.05,
+    damage: e.damage
+  });
+}
+
+function updateBullets(dt) {
+  for (var i = bullets.length - 1; i >= 0; i--) {
+    var b = bullets[i];
+    b.life -= dt;
+    if (b.life <= 0) { bullets.splice(i, 1); continue; }
+
+    var sub = 3;
+    var sdt = dt / sub;
+    var dead = false;
+    for (var s = 0; s < sub; s++) {
+      if (b.portalCd > 0) b.portalCd -= sdt;
+      // portal transit (velocity is rotated -> real momentum carry)
+      if (b.portalCd <= 0) {
+        var portaled = false;
+        for (var k = 0; k < portals.length; k++) {
+          var P = portals[k];
+          var dx = b.x - P.cx, dz = b.z - P.cz;
+          var nd = dx * P.nx + dz * P.nz;
+          if (nd > 0 && nd < 0.55) {
+            var lat = dx * P.rx + dz * P.rz;
+            if (Math.abs(lat) < P.halfW) {
+              var vn = b.vx * P.nx + b.vz * P.nz;
+              if (vn < -0.4) { doTeleport(b, P, false); portaled = true; break; }
+            }
+          }
+        }
+        if (portaled) continue;
+      }
+
+      b.x += b.vx * sdt;
+      b.z += b.vz * sdt;
+
+      if (solidAt(b.x, b.z)) {
+        spawnParticles(b.x, b.z, 1.1, "#b46bff", 5);
+        dead = true; break;
+      }
+      var pdx = player.x - b.x, pdz = player.z - b.z;
+      if (pdx * pdx + pdz * pdz < 0.42 * 0.42) {
+        hurtPlayer(b.damage);
+        spawnParticles(b.x, b.z, 1.1, "#ff3333", 8);
+        dead = true; break;
+      }
+    }
+    if (dead) bullets.splice(i, 1);
+  }
+}
+
+/* =========================================================================
+   14. PLAYER
+   ========================================================================= */
+function hurtPlayer(dmg) {
+  if (state.mode !== "playing") return;
+  player.health -= dmg;
+  player.hurtFlash = 0.42;
+  state.shake = Math.max(state.shake, 0.35);
+  Audio2.sfx("hurt");
+  updateHUD();
+  if (player.health <= 0) {
+    player.health = 0;
+    endGame(false);
+  }
+}
+
+function shoot() {
+  if (player.fireCd > 0) return;
+  if (player.ammo <= 0) {
+    Audio2.sfx("empty");
+    player.fireCd = 0.3;
+    return;
+  }
+  player.ammo--;
+  player.fireCd = 0.16;
+  player.muzzle = 0.09;
+  state.shake = Math.max(state.shake, 0.06);
+  Audio2.sfx("shoot");
+  updateHUD();
+
+  var dx = Math.cos(player.yaw), dz = Math.sin(player.yaw);
+  var maxD = wallDistAlong(player.x, player.z, dx, dz, 30);
+  var best = null, bestT = maxD;
+
+  for (var i = 0; i < enemies.length; i++) {
+    var e = enemies[i];
+    if (e.dead || e.removed || e.spawnT > 0) continue;
+    var ex = e.x - player.x, ez = e.z - player.z;
+    var t = ex * dx + ez * dz;
+    if (t <= 0.25 || t > bestT) continue;
+    var perp = Math.abs(ex * dz - ez * dx);
+    if (perp < e.radius) {
+      bestT = t;
+      best = e;
+    }
+  }
+
+  if (best) {
+    damageEnemy(best, 1, dx, dz);
+    var hitX = player.x + dx * bestT;
+    var hitZ = player.z + dz * bestT;
+    spawnParticles(hitX, hitZ, 1.2, "#ffaa33", 5);
+  } else {
+    var wx = player.x + dx * Math.min(bestT, 6);
+    var wz = player.z + dz * Math.min(bestT, 6);
+    spawnParticles(wx, wz, 1.2, "#8899aa", 3);
+  }
+}
+
+function updatePlayer(dt) {
+  if (player.fireCd > 0) player.fireCd -= dt;
+  if (player.muzzle > 0) player.muzzle -= dt;
+  if (player.hurtFlash > 0) player.hurtFlash -= dt;
+
+  var fwd = input.forward;
+  var str = input.strafe;
+  var mag = Math.sqrt(fwd * fwd + str * str);
+  if (mag > 1) { fwd /= mag; str /= mag; }
+
+  var dirX = Math.cos(player.yaw), dirZ = Math.sin(player.yaw);
+  var vx = (dirX * fwd - dirZ * str) * PLAYER_SPEED;
+  var vz = (dirZ * fwd + dirX * str) * PLAYER_SPEED;
+
+  moveEntity(player, vx, vz, dt, PLAYER_RADIUS, true);
+
+  // view bob
+  var moving = (mag > 0.1) ? 1 : 0;
+  player.bob += dt * 10 * moving;
+
+  if (input.fire || mouseDown) shoot();
+}
+
+/* =========================================================================
+   15. WAVES
+   ========================================================================= */
+var WAVE_DEFS = [
+  ["grunt", "grunt", "grunt"],
+  ["grunt", "grunt", "caster", "grunt", "grunt"],
+  ["grunt", "grunt", "caster", "grunt", "caster", "grunt", "grunt"]
+];
+
+function beginWave(n) {
+  state.wave = n;
+  state.waveClearT = 0;
+  state.spawnQueue = WAVE_DEFS[n - 1].slice();
+  state.spawnTimer = 0.4;
+  Audio2.sfx("wave");
+  updateHUD();
+}
+
+function updateWaves(dt) {
+  if (state.waveClearT > 0) {
+    state.waveClearT -= dt;
+    if (state.waveClearT <= 0) {
+      if (state.wave >= MAX_WAVES) {
+        endGame(true);
+      } else {
+        beginWave(state.wave + 1);
+      }
+    }
+    return;
+  }
+
+  if (state.spawnQueue.length > 0) {
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      spawnEnemy(state.spawnQueue.shift());
+      state.spawnTimer = 0.75;
+    }
+    return;
+  }
+
+  var alive = 0;
+  for (var i = 0; i < enemies.length; i++) {
+    if (!enemies[i].dead && !enemies[i].removed) alive++;
+  }
+  if (alive === 0) {
+    state.waveClearT = 1.6;
+  }
+}
+
+/* =========================================================================
+   16. DEMO BOT
+   ========================================================================= */
+var bot = {
+  t: 0,
+  portalGoalT: 0,
+  strafeDir: 1,
+  strafeT: 0,
+  stuckT: 0,
+  lastX: 0, lastZ: 0,
+  aimNoise: 0,
+  think: 0
+};
+
+function resetBot() {
+  bot.t = 0;
+  bot.portalGoalT = 0;
+  bot.strafeDir = 1;
+  bot.strafeT = 0;
+  bot.stuckT = 0;
+  bot.lastX = player.x;
+  bot.lastZ = player.z;
+  bot.aimNoise = 0;
+  bot.think = 0;
+}
+
+function nearestActivePickup(type) {
+  var best = null, bd = 1e9;
+  for (var i = 0; i < pickups.length; i++) {
+    var p = pickups[i];
+    if (!p.active || p.type !== type) continue;
+    var d = Math.hypot(p.x - player.x, p.z - player.z);
+    if (d < bd) { bd = d; best = p; }
+  }
+  return best;
+}
+
+function botAct(dt) {
+  bot.t += dt;
+  var p = player;
+
+  /* --- choose target --- */
+  var tgt = null, tdist = 1e9, tgtVis = false;
+  for (var i = 0; i < enemies.length; i++) {
+    var e = enemies[i];
+    if (e.dead || e.removed || e.spawnT > 0) continue;
+    var d = Math.hypot(e.x - p.x, e.z - p.z);
+    var vis = hasLOS(p.x, p.z, e.x, e.z);
+    if (vis && (!tgtVis || d < tdist)) { tgt = e; tdist = d; tgtVis = true; }
+    else if (!tgtVis && d < tdist) { tgt = e; tdist = d; }
+  }
+
+  /* --- aim --- */
+  var aim = p.yaw;
+  if (tgt) aim = Math.atan2(tgt.z - p.z, tgt.x - p.x);
+  bot.aimNoise = Math.sin(bot.t * 5.1) * 0.010 + Math.sin(bot.t * 11.3) * 0.005;
+  var aimTarget = aim + bot.aimNoise;
+  p.yaw = lerpAngle(p.yaw, aimTarget, 1 - Math.exp(-dt * 22));
+  p.pitch += (0 - p.pitch) * Math.min(1, dt * 4);
+
+  /* --- decide goal --- */
+  var goal = null;
+  var lowHP = p.health < 55;
+  var lowAmmo = p.ammo < 8;
+
+  if (lowHP) {
+    var hp = nearestActivePickup("health");
+    if (hp) goal = { x: hp.x, z: hp.z };
+  }
+  if (!goal && lowAmmo) {
+    var am = nearestActivePickup("ammo");
+    if (am) goal = { x: am.x, z: am.z };
+  }
+  // guaranteed portal demonstration early in the run
+  if (!goal && !state.demoPortalUsed && bot.t > 1.0) {
+    // head for whichever portal is closer
+    var bestP = null, bpd = 1e9;
+    for (var k = 0; k < portals.length; k++) {
+      var P = portals[k];
+      var dd = Math.hypot(P.cx - p.x, P.cz - p.z);
+      if (dd < bpd) { bpd = dd; bestP = P; }
+    }
+    if (bestP) goal = { x: bestP.cx, z: bestP.cz, portal: true };
+    bot.portalGoalT += dt;
+    if (bot.portalGoalT > 9) { state.demoPortalUsed = true; } // give up, don't loop forever
+  }
+  // emergency escape through a portal when very low
+  if (!goal && p.health < 32 && !state.demoPortalUsed) {
+    var P2 = portals[0];
+    goal = { x: P2.cx, z: P2.cz, portal: true };
+  }
+
+  /* --- movement --- */
+  var wx = 0, wz = 0;
+  if (goal) {
+    var gx = goal.x - p.x, gz = goal.z - p.z;
+    var gd = Math.hypot(gx, gz);
+    if (gd > 0.05) { wx = gx / gd; wz = gz / gd; }
+    // still dodge if an enemy is breathing down our neck
+    if (tgt && tdist < 2.6 && !goal.portal) {
+      wx -= (tgt.x - p.x) / (tdist || 1) * 0.9;
+      wz -= (tgt.z - p.z) / (tdist || 1) * 0.9;
+    }
+  } else if (tgt) {
+    var tx = (tgt.x - p.x) / (tdist || 1);
+    var tz = (tgt.z - p.z) / (tdist || 1);
+    bot.strafeT -= dt;
+    if (bot.strafeT <= 0) {
+      bot.strafeT = 1.1 + Math.random() * 0.9;
+      bot.strafeDir = Math.random() < 0.5 ? -1 : 1;
+    }
+    // orbit
+    var px = -tz * bot.strafeDir, pz = tx * bot.strafeDir;
+    var inRad = 0, outRad = 0;
+    if (tdist < 3.4) outRad = 1;
+    else if (tdist > 8.5) inRad = 1;
+    wx = px * 0.85 - tx * outRad * 1.0 + tx * inRad * 1.0;
+    wz = pz * 0.85 - tz * outRad * 1.0 + tz * inRad * 1.0;
+  } else {
+    // idle: drift toward room centre
+    var cx2 = 12 - p.x, cz2 = 12 - p.z;
+    var cd = Math.hypot(cx2, cz2);
+    if (cd > 1) { wx = cx2 / cd * 0.5; wz = cz2 / cd * 0.5; }
+  }
+
+  // wall avoidance: if straight ahead is blocked, slide
+  var mlen = Math.hypot(wx, wz);
+  if (mlen > 0.001) {
+    wx /= mlen; wz /= mlen;
+    var probe = 0.9;
+    if (collides(p.x + wx * probe, p.z + wz * probe, PLAYER_RADIUS)) {
+      var alt1x = wx * 0.4 - wz * 0.9, alt1z = wz * 0.4 + wx * 0.9;
+      var alt2x = wx * 0.4 + wz * 0.9, alt2z = wz * 0.4 - wx * 0.9;
+      if (!collides(p.x + alt1x * probe, p.z + alt1z * probe, PLAYER_RADIUS)) {
+        wx = alt1x; wz = alt1z;
+      } else if (!collides(p.x + alt2x * probe, p.z + alt2z * probe, PLAYER_RADIUS)) {
+        wx = alt2x; wz = alt2z;
+      }
+    }
+  }
+
+  // stuck detection
+  var moved = Math.hypot(p.x - bot.lastX, p.z - bot.lastZ);
+  bot.lastX = p.x; bot.lastZ = p.z;
+  if (moved < 0.004 && (Math.abs(wx) + Math.abs(wz)) > 0.1) {
+    bot.stuckT += dt;
+    if (bot.stuckT > 0.5) {
+      bot.strafeDir *= -1;
+      wx = -wz * bot.strafeDir;
+      wz = wx * bot.strafeDir;
+      bot.stuckT = 0;
+    }
+  } else {
+    bot.stuckT = 0;
+  }
+
+  // convert world dir -> local forward / strafe relative to current yaw
+  var dirX = Math.cos(p.yaw), dirZ = Math.sin(p.yaw);
+  input.forward = clamp(wx * dirX + wz * dirZ, -1, 1);
+  input.strafe = clamp(-wx * dirZ + wz * dirX, -1, 1);
+
+  /* --- fire --- */
+  var aligned = Math.abs(normAngle(aim - p.yaw)) < 0.07;
+  input.fire = !!(tgt && aligned && tgtVis && p.ammo > 0);
+}
+
+/* =========================================================================
+   17. GAME FLOW
+   ========================================================================= */
+function resetGame(demo) {
+  buildMap();
+  buildPortals();
+  player.x = 12.0; player.z = 20.0;
+  player.yaw = -Math.PI / 2;
+  player.pitch = 0;
+  player.health = 100;
+  player.ammo = 50;
+  player.fireCd = 0;
+  player.hurtFlash = 0;
+  player.muzzle = 0;
+  player.portalCd = 0;
+  player.bob = 0;
+
+  enemies = [];
+  bullets = [];
+  particles = [];
+  initPickups();
+
+  state.wave = 0;
+  state.spawnQueue = [];
+  state.spawnTimer = 0;
+  state.waveClearT = 0;
+  state.shake = 0;
+  state.demo = !!demo;
+  state.demoPortalUsed = false;
+  state.time = 0;
+  state.mode = "playing";
+
+  input.forward = 0; input.strafe = 0; input.fire = false;
+  mouseDown = false;
+  resetBot();
+
+  document.getElementById("hud").classList.add("on");
+  hideOverlay();
+  updateHUD();
+  beginWave(1);
+
+  if (isTouch) document.getElementById("touch").classList.add("on");
+
+  Audio2.resume();
+  Audio2.startMusic();
+}
+
+function endGame(win) {
+  state.mode = win ? "win" : "over";
+  input.fire = false;
+  mouseDown = false;
+  document.getElementById("touch").classList.remove("on");
+  if (document.pointerLockElement) document.exitPointerLock();
+
+  var cls = win ? "win" : "lose";
+  var title = win ? "ROOM CLEARED" : "YOU FELL";
+  var sub = win
+    ? "ALL THREE WAVES ELIMINATED"
+    : "HEALTH DEPLETED ON WAVE " + state.wave;
+
+  var extra = "";
+  if (win && state.demo) {
+    extra = '<div class="hint">DEMO COMPLETE &mdash; the room is proven beatable.' +
+      (state.demoPortalUsed
+        ? ' <b>Portal used.</b>'
+        : ' <b>(portal unused this run)</b>') + '</div>';
+  } else if (win) {
+    extra = '<div class="hint">Health remaining: <b>' + Math.max(0, Math.round(player.health)) +
+      '</b> &nbsp;/&nbsp; Ammo left: <b>' + player.ammo + '</b></div>';
+  }
+
+  showOverlay(
+    '<div class="panel ' + cls + '">' +
+    '<div class="big">' + title + '</div>' +
+    '<div class="sub">' + sub + '</div>' +
+    extra +
+    '<button class="btn" id="againBtn">RESTART</button>' +
+    '<button class="btn ghost" id="menuBtn">MAIN MENU</button>' +
+    '</div>'
+  );
+  var a = document.getElementById("againBtn");
+  if (a) a.onclick = function () { resetGame(state.demo); };
+  var m = document.getElementById("menuBtn");
+  if (m) m.onclick = function () { showTitle(); };
+
+  if (win && state.demo) {
+    document.getElementById("overlay").classList.remove("hide");
+  }
+}
+
+/* =========================================================================
+   18. OVERLAY
+   ========================================================================= */
+var overlayEl = document.getElementById("overlay");
+function showOverlay(html) {
+  overlayEl.innerHTML = html;
+  overlayEl.classList.remove("hide");
+}
+function hideOverlay() {
+  overlayEl.classList.add("hide");
+  overlayEl.innerHTML = "";
+}
+
+function showTitle() {
+  state.mode = "title";
+  state.demo = false;
+  document.getElementById("hud").classList.remove("on");
+  document.getElementById("touch").classList.remove("on");
+  if (document.pointerLockElement) document.exitPointerLock();
+  enemies = []; bullets = []; particles = [];
+  player.x = 12; player.z = 12; player.yaw = 0; player.pitch = 0;
+
+  showOverlay(
+    '<div class="panel">' +
+    '<div class="logo">PORTALFELL</div>' +
+    '<div class="tag">One room &middot; Two portals &middot; Three waves</div>' +
+    '<button class="btn" id="startBtn">START</button>' +
+    '<button class="btn ghost" id="demoBtn">DEMO (bot plays)</button>' +
+    '<div class="hint">' +
+    '<b>WASD</b> move &nbsp; <b>MOUSE</b> look &nbsp; <b>CLICK</b> fire<br>' +
+    'Walk into a portal to exit the other side.<br>' +
+    'Touch: left stick moves, right side looks, FIRE button shoots.<br>' +
+    'Use the SOUND button (top-right) to mute/unmute audio.' +
+    '</div>' +
+    '</div>'
+  );
+  document.getElementById("startBtn").onclick = function () {
+    Audio2.resume();
+    resetGame(false);
+    if (!isTouch) canvas.requestPointerLock();
+  };
+  document.getElementById("demoBtn").onclick = function () {
+    Audio2.resume();
+    resetGame(true);
+  };
+}
+
+/* =========================================================================
+   19. HUD
+   ========================================================================= */
+var hpFillEl = document.getElementById("hpFill");
+var hpTxtEl = document.getElementById("hpTxt");
+var ammoNumEl = document.getElementById("ammoNum");
+var waveLblEl = document.getElementById("waveLbl");
+var crossEl = document.getElementById("cross");
+var _lastHud = { hp: -1, ammo: -1, wave: -1 };
+
+function updateHUD() {
+  var hp = Math.max(0, Math.round(player.health));
+  if (hp !== _lastHud.hp) {
+    _lastHud.hp = hp;
+    hpTxtEl.textContent = hp;
+    var f = clamp(hp / player.maxHealth, 0, 1);
+    hpFillEl.style.transform = "scaleX(" + f + ")";
+    hpFillEl.style.background = f > 0.6
+      ? "linear-gradient(180deg,#4aff7a,#10a030 70%,#054010)"
+      : (f > 0.3
+        ? "linear-gradient(180deg,#ffdd4a,#b08010 70%,#503a05)"
+        : "linear-gradient(180deg,#ff5a4a,#a01010 70%,#5c0606)");
+  }
+  if (player.ammo !== _lastHud.ammo) {
+    _lastHud.ammo = player.ammo;
+    ammoNumEl.textContent = player.ammo;
+  }
+  if (state.wave !== _lastHud.wave) {
+    _lastHud.wave = state.wave;
+    waveLblEl.textContent = "WAVE " + Math.max(1, state.wave) + " / " + MAX_WAVES;
+  }
+}
+
+/* =========================================================================
+   20. RENDERER
+   ========================================================================= */
+var FOG_R = 10, FOG_G = 12, FOG_B = 22;
+
+function fogShade(d) {
+  var s = 1.32 - d * 0.048;
+  if (s > 1) s = 1;
+  if (s < 0.16) s = 0.16;
+  return (s * 256) | 0;
+}
+
+function render() {
+  if (!imgData) return;
+
+  var shakeX = 0, shakeY = 0;
+  if (state.shake > 0) {
+    shakeX = (Math.random() - 0.5) * state.shake * 26;
+    shakeY = (Math.random() - 0.5) * state.shake * 26;
+  }
+
+  var dirX = Math.cos(player.yaw), dirY = Math.sin(player.yaw);
+  var planeX = -dirY * planeLen, planeY = dirX * planeLen;
+
+  var bobY = Math.sin(player.bob) * 2.2;
+  var horizon = H * 0.5 + player.pitch * H + bobY + shakeY;
+
+  var posX = player.x, posZ = player.z;
+
+  /* ---------- ceiling ---------- */
+  var ceilStart = Math.max(0, Math.floor(horizon));
+  var rayDirX0 = dirX - planeX, rayDirY0 = dirY - planeY;
+  var rayDirX1 = dirX + planeX, rayDirY1 = dirY + planeY;
+  var ceilH = (WH - HE) * H;
+
+  for (var y = 0; y < ceilStart; y++) {
+    var pc = horizon - y;
+    if (pc < 0.6) continue;
+    var rowDistC = ceilH / pc;
+    if (rowDistC > 60) rowDistC = 60;
+    var stepCX = rowDistC * (rayDirX1 - rayDirX0) / W;
+    var stepCY = rowDistC * (rayDirY1 - rayDirY0) / W;
+    var fx = posX + rowDistC * rayDirX0;
+    var fy = posZ + rowDistC * rayDirY0;
+    var shadeC = fogShade(rowDistC);
+    var inv = 256 - shadeC;
+    var frC = (FOG_R * inv) >> 8, fgC = (FOG_G * inv) >> 8, fbC = (FOG_B * inv) >> 8;
+    var o = y * W;
+    for (var x = 0; x < W; x++) {
+      var tx = ((fx * 64) | 0) & 63;
+      var ty = ((fy * 64) | 0) & 63;
+      var c = ceilTex[(ty << 6) + tx];
+      var r = (((c & 255) * shadeC) >> 8) + frC;
+      var g = ((((c >> 8) & 255) * shadeC) >> 8) + fgC;
+      var b = ((((c >> 16) & 255) * shadeC) >> 8) + fbC;
+      buf32[o + x] = (255 << 24) | (b << 16) | (g << 8) | r;
+      fx += stepCX; fy += stepCY;
+    }
+  }
+
+  /* ---------- floor ---------- */
+  var floorStart = Math.max(0, Math.ceil(horizon));
+  var floorH = HE * H;
+  for (var y2 = floorStart; y2 < H; y2++) {
+    var pf = y2 - horizon;
+    if (pf < 0.6) continue;
+    var rowDistF = floorH / pf;
+    if (rowDistF > 60) rowDistF = 60;
+    var stepFX = rowDistF * (rayDirX1 - rayDirX0) / W;
+    var stepFY = rowDistF * (rayDirY1 - rayDirY0) / W;
+    var fx2 = posX + rowDistF * rayDirX0;
+    var fy2 = posZ + rowDistF * rayDirY0;
+    var shadeF = fogShade(rowDistF);
+    var invF = 256 - shadeF;
+    var frF = (FOG_R * invF) >> 8, fgF = (FOG_G * invF) >> 8, fbF = (FOG_B * invF) >> 8;
+    var o2 = y2 * W;
+    for (var x2 = 0; x2 < W; x2++) {
+      var tx2 = ((fx2 * 64) | 0) & 63;
+      var ty2 = ((fy2 * 64) | 0) & 63;
+      var c2 = floorTex[(ty2 << 6) + tx2];
+      var r2 = (((c2 & 255) * shadeF) >> 8) + frF;
+      var g2 = ((((c2 >> 8) & 255) * shadeF) >> 8) + fgF;
+      var b2 = ((((c2 >> 16) & 255) * shadeF) >> 8) + fbF;
+      buf32[o2 + x2] = (255 << 24) | (b2 << 16) | (g2 << 8) | r2;
+      fx2 += stepFX; fy2 += stepFY;
+    }
+  }
+
+  /* ---------- walls ---------- */
+  var animFrame = ((state.time * 13) | 0) & 7;
+  for (var col = 0; col < W; col++) {
+    var cameraX = 2 * col / W - 1;
+    var rdx = dirX + planeX * cameraX;
+    var rdy = dirY + planeY * cameraX;
+
+    var mapX = posX | 0, mapY = posZ | 0;
+    var ddx = rdx === 0 ? 1e30 : Math.abs(1 / rdx);
+    var ddy = rdy === 0 ? 1e30 : Math.abs(1 / rdy);
+    var stepX, stepY, sideDistX, sideDistY;
+
+    if (rdx < 0) { stepX = -1; sideDistX = (posX - mapX) * ddx; }
+    else { stepX = 1; sideDistX = (mapX + 1 - posX) * ddx; }
+    if (rdy < 0) { stepY = -1; sideDistY = (posZ - mapY) * ddy; }
+    else { stepY = 1; sideDistY = (mapY + 1 - posZ) * ddy; }
+
+    var side = 0, hit = 0, guard = 0, tile = 0;
+    while (!hit && guard++ < 160) {
+      if (sideDistX < sideDistY) { sideDistX += ddx; mapX += stepX; side = 0; }
+      else { sideDistY += ddy; mapY += stepY; side = 1; }
+      if (mapX < 0 || mapY < 0 || mapX >= MAP_W || mapY >= MAP_H) { hit = 1; break; }
+      tile = map[mapY * MAP_W + mapX];
+      if (tile) hit = 1;
+    }
+
+    var perp = side === 0
+      ? ((mapX - posX + (1 - stepX) / 2) / rdx)
+      : ((mapY - posZ + (1 - stepY) / 2) / rdy);
+    if (!isFinite(perp) || perp < 0.0001) perp = 0.0001;
+    zbuf[col] = perp;
+
+    var lineH = WH * H / perp;
+    var yBottom = horizon + HE * H / perp;
+    var yTop = yBottom - lineH;
+    var y0 = Math.max(0, Math.ceil(yTop));
+    var y1 = Math.min(H - 1, Math.floor(yBottom));
+    if (y1 < y0) continue;
+
+    // wall texture coordinate
+    var wallX = side === 0 ? (posZ + perp * rdy) : (posX + perp * rdx);
+    wallX -= Math.floor(wallX);
+    var texX = (wallX * TS) | 0;
+    if (side === 0 && rdx > 0) texX = TS - 1 - texX;
+    if (side === 1 && rdy < 0) texX = TS - 1 - texX;
+    if (texX < 0) texX = 0; if (texX >= TS) texX = TS - 1;
+
+    // portal overlay?
+    var isPortal = -1;
+    if (tile) {
+      var hx = posX + perp * rdx;
+      var hy = posZ + perp * rdy;
+      for (var pi = 0; pi < portals.length; pi++) {
+        var P = portals[pi];
+        var pdx = hx - P.cx, pdz = hy - P.cz;
+        if (Math.abs(pdx * P.nx + pdz * P.nz) < 0.14) {
+          var lat = pdx * P.rx + pdz * P.rz;
+          if (Math.abs(lat) < P.halfW) {
+            isPortal = pi;
+            var u = (lat + P.halfW) / (2 * P.halfW);
+            texX = (u * (TS - 1)) | 0;
+            if (texX < 0) texX = 0;
+            if (texX >= TS) texX = TS - 1;
+            break;
+          }
+        }
+      }
+    }
+
+    var texArr;
+    if (isPortal >= 0) texArr = portalAnims[isPortal][animFrame];
+    else if (tile === 2) texArr = stoneTex;
+    else texArr = brickTex;
+
+    var shade = fogShade(perp);
+    var invS = 256 - shade;
+    var frS = (FOG_R * invS) >> 8, fgS = (FOG_G * invS) >> 8, fbS = (FOG_B * invS) >> 8;
+
+    var texPos = (HE - (y0 - horizon) * perp / H) * 64;
+    var texStep = -(perp / H) * 64;
+    var oo = y0 * W + col;
+
+    var flashTint = 0;
+    if (isPortal >= 0) flashTint = 1;
+
+    for (var yy = y0; yy <= y1; yy++) {
+      var tyy = texPos & 63;
+      texPos += texStep;
+      var cc = texArr[(tyy << 6) + texX];
+      var rr = (((cc & 255) * shade) >> 8) + frS;
+      var gg = ((((cc >> 8) & 255) * shade) >> 8) + fgS;
+      var bb = ((((cc >> 16) & 255) * shade) >> 8) + fbS;
+      buf32[oo] = (255 << 24) | (bb << 16) | (gg << 8) | rr;
+      oo += W;
+    }
+
+    // soft glow spill around a portal on adjacent columns
+    if (isPortal < 0) {
+      for (var pi2 = 0; pi2 < portals.length; pi2++) {
+        var P2 = portals[pi2];
+        var hx2 = posX + perp * rdx, hy2 = posZ + perp * rdy;
+        var qdx = hx2 - P2.cx, qdz = hy2 - P2.cz;
+        if (Math.abs(qdx * P2.nx + qdz * P2.nz) < 0.14) {
+          var lat2 = Math.abs(qdx * P2.rx + qdz * P2.rz);
+          var spill = 1 - (lat2 - P2.halfW) / 0.5;
+          if (spill > 0 && spill <= 1 && lat2 >= P2.halfW) {
+            var oo2 = y0 * W + col;
+            var gr = P2.slot === 0 ? 30 : 60;
+            var gg2 = P2.slot === 0 ? 70 : 34;
+            var bb2 = P2.slot === 0 ? 150 : 8;
+            for (var yb = y0; yb <= y1; yb++) {
+              var dst = buf32[oo2];
+              var dr = dst & 255, dg = (dst >> 8) & 255, db = (dst >> 16) & 255;
+              dr = Math.min(255, dr + gr * spill * 0.55);
+              dg = Math.min(255, dg + gg2 * spill * 0.55);
+              db = Math.min(255, db + bb2 * spill * 0.55);
+              buf32[oo2] = (255 << 24) | (db << 16) | (dg << 8) | dr;
+              oo2 += W;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* ---------- sprites ---------- */
+  drawSprites(horizon, dirX, dirY, planeX, planeY);
+
+  /* ---------- particles (simple billboards) ---------- */
+  drawParticles(horizon, dirX, dirY, planeX, planeY);
+
+  ctx.putImageData(imgData, 0, 0);
+
+  /* ---------- screen overlays ---------- */
+  drawOverlays(shakeX);
+}
+
+function projectSprite(sx, sz, dirX, dirY, planeX, planeY, invDet) {
+  var spx = sx - player.x, spz = sz - player.z;
+  var tX = invDet * (dirY * spx - dirX * spz);
+  var tY = invDet * (-planeY * spx + planeX * spz);
+  return { tx: tX, ty: tY };
+}
+
+function drawSprites(horizon, dirX, dirY, planeX, planeY) {
+  var invDet = 1.0 / (planeX * dirY - dirX * planeY);
+  if (!isFinite(invDet)) return;
+
+  var list = [];
+  var i, e;
+  for (i = 0; i < enemies.length; i++) {
+    e = enemies[i];
+    if (e.removed) continue;
+    var dxe = e.x - player.x, dze = e.z - player.z;
+    list.push({
+      kind: 0, x: e.x, z: e.z, d2: dxe * dxe + dze * dze,
+      tex: e.tex, sw: e.sw, sh: e.sh,
+      z0: 0,
+      flash: e.hitFlash,
+      dead: e.dead, deadT: e.deadT,
+      spawnT: e.spawnT,
+      seed: e.seed
+    });
+  }
+  for (i = 0; i < pickups.length; i++) {
+    var p = pickups[i];
+    if (!p.active) continue;
+    var dxp = p.x - player.x, dzp = p.z - player.z;
+    list.push({
+      kind: 1, x: p.x, z: p.z, d2: dxp * dxp + dzp * dzp,
+      tex: p.tex, sw: p.sw, sh: p.sh,
+      z0: 0.42 + Math.sin(state.time * 2.6 + p.seed) * 0.13,
+      flash: 0, dead: false, deadT: 0, spawnT: 0, seed: p.seed
+    });
+  }
+  for (i = 0; i < bullets.length; i++) {
+    var b = bullets[i];
+    var dxb = b.x - player.x, dzb = b.z - player.z;
+    list.push({
+      kind: 2, x: b.x, z: b.z, d2: dxb * dxb + dzb * dzb,
+      tex: b.tex, sw: b.sw, sh: b.sh, z0: b.z0,
+      flash: 0, dead: false, deadT: 0, spawnT: 0, seed: 0
+    });
+  }
+
+  list.sort(function (a, b) { return b.d2 - a.d2; });
+
+  for (var n = 0; n < list.length; n++) {
+    var s = list[n];
+    var pr = projectSprite(s.x, s.z, dirX, dirY, planeX, planeY, invDet);
+    if (pr.ty < 0.25) continue;
+
+    var tY = pr.ty;
+    var screenX = (W * 0.5) * (1 + pr.tx / tY);
+
+    var sh = s.sh;
+    var alphaMul = 1;
+    if (s.kind === 0) {
+      if (s.dead) {
+        sh = s.sh * Math.max(0.12, 1 - s.deadT * 1.4);
+        alphaMul = Math.max(0, 1 - s.deadT * 1.35);
+        if (alphaMul <= 0.02) continue;
+      } else if (s.spawnT > 0) {
+        alphaMul = 1 - s.spawnT / 0.55;
+        sh = s.sh * (0.4 + 0.6 * alphaMul);
+      }
+    }
+
+    var hPix = sh * H / tY;
+    var wPix = s.sw * H / tY;
+    if (hPix < 1 || wPix < 1) continue;
+
+    var bottomY = horizon + (HE - s.z0) * H / tY;
+    var topY = bottomY - hPix;
+
+    var x0 = screenX - wPix * 0.5;
+    var x1 = screenX + wPix * 0.5;
+    var ix0 = Math.max(0, Math.floor(x0));
+    var ix1 = Math.min(W - 1, Math.ceil(x1));
+    var iy0 = Math.max(0, Math.floor(topY));
+    var iy1 = Math.min(H - 1, Math.ceil(bottomY));
+    if (ix1 < ix0 || iy1 < iy0) continue;
+
+    var tex = s.tex;
+    var tw = tex.w, th = tex.h;
+    var tdata = tex.data;
+    var spanX = Math.max(0.0001, x1 - x0);
+    var spanY = Math.max(0.0001, bottomY - topY);
+    var shade = fogShade(tY);
+    var invS = 256 - shade;
+    var frS = (FOG_R * invS) >> 8, fgS = (FOG_G * invS) >> 8, fbS = (FOG_B * invS) >> 8;
+    var flash = s.flash;
+
+    for (var px = ix0; px <= ix1; px++) {
+      if (zbuf[px] <= tY) continue;
+      var u = (px - x0) / spanX;
+      var tx = (u * tw) | 0;
+      if (tx < 0) tx = 0; if (tx >= tw) tx = tw - 1;
+
+      var o = iy0 * W + px;
+      for (var py = iy0; py <= iy1; py++, o += W) {
+        var v = (py - topY) / spanY;
+        var ty = (v * th) | 0;
+        if (ty < 0) ty = 0; if (ty >= th) ty = th - 1;
+        var c = tdata[ty * tw + tx];
+        var a = (c >>> 24) & 255;
+        if (a < 110) continue;
+        if (a * alphaMul < 110) continue;
+
+        var r = (((c & 255) * shade) >> 8) + frS;
+        var g = ((((c >> 8) & 255) * shade) >> 8) + fgS;
+        var b = ((((c >> 16) & 255) * shade) >> 8) + fbS;
+
+        if (flash > 0) {
+          var fk = flash / 0.13;
+          r = r + (255 - r) * fk * 0.8;
+          g = g * (1 - fk * 0.5);
+          b = b * (1 - fk * 0.5);
+        }
+
+        buf32[o] = (255 << 24) | ((b | 0) << 16) | ((g | 0) << 8) | (r | 0);
+      }
+    }
+  }
+}
+
+function drawParticles(horizon, dirX, dirY, planeX, planeY) {
+  if (particles.length === 0) return;
+  var invDet = 1.0 / (planeX * dirY - dirX * planeY);
+  if (!isFinite(invDet)) return;
+
+  for (var i = 0; i < particles.length; i++) {
+    var p = particles[i];
+    var pr = projectSprite(p.x, p.z, dirX, dirY, planeX, planeY, invDet);
+    if (pr.ty < 0.3) continue;
+    var tY = pr.ty;
+    var sx = (W * 0.5) * (1 + pr.tx / tY);
+    var sy = horizon + (HE - p.y) * H / tY;
+    var sz = Math.max(1, (p.size * H / tY) | 0);
+
+    var lifeF = clamp(p.life / 0.6, 0, 1);
+    if (lifeF <= 0.05) continue;
+
+    var ix0 = Math.max(0, (sx - sz) | 0);
+    var ix1 = Math.min(W - 1, (sx + sz) | 0);
+    var iy0 = Math.max(0, (sy - sz) | 0);
+    var iy1 = Math.min(H - 1, (sy + sz) | 0);
+
+    // parse hex color
+    var col = p.color;
+    var cr = parseInt(col.substr(1, 2), 16);
+    var cg = parseInt(col.substr(3, 2), 16);
+    var cb = parseInt(col.substr(5, 2), 16);
+
+    for (var yy = iy0; yy <= iy1; yy++) {
+      for (var xx = ix0; xx <= ix1; xx++) {
+        if (zbuf[xx] <= tY) continue;
+        var dd = Math.hypot(xx - sx, yy - sy);
+        if (dd > sz) continue;
+        var f = (1 - dd / sz) * lifeF;
+        var idx = yy * W + xx;
+        var dst = buf32[idx];
+        var dr = dst & 255, dg = (dst >> 8) & 255, db = (dst >> 16) & 255;
+        dr = dr + (cr - dr) * f;
+        dg = dg + (cg - dg) * f;
+        db = db + (cb - db) * f;
+        buf32[idx] = (255 << 24) | ((db | 0) << 16) | ((dg | 0) << 8) | (dr | 0);
+      }
+    }
+  }
+}
+
+/* screen-space effects */
+var vignetteGrad = null;
+function drawOverlays(shakeX) {
+  // vignette (cached-ish; rebuilt on resize)
+  if (!vignetteGrad || vignetteGrad.__w !== W || vignetteGrad.__h !== H) {
+    var g = ctx.createRadialGradient(
+      W * 0.5, H * 0.5, Math.min(W, H) * 0.25,
+      W * 0.5, H * 0.5, Math.max(W, H) * 0.78
+    );
+    g.addColorStop(0, "rgba(0,0,0,0)");
+    g.addColorStop(0.6, "rgba(0,0,0,0.20)");
+    g.addColorStop(1, "rgba(0,0,0,0.72)");
+    g.__w = W; g.__h = H;
+    vignetteGrad = g;
+  }
+  ctx.fillStyle = vignetteGrad;
+  ctx.fillRect(0, 0, W, H);
+
+  // muzzle flash
+  if (player.muzzle > 0) {
+    var f = player.muzzle / 0.09;
+    var g2 = ctx.createRadialGradient(W * 0.5, H * 0.92, 2, W * 0.5, H * 0.92, H * 0.55);
+    g2.addColorStop(0, "rgba(255,230,160," + (0.55 * f) + ")");
+    g2.addColorStop(0.4, "rgba(255,150,60," + (0.22 * f) + ")");
+    g2.addColorStop(1, "rgba(255,80,0,0)");
+    ctx.fillStyle = g2;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // hurt flash
+  if (player.hurtFlash > 0) {
+    var hf = player.hurtFlash / 0.42;
+    ctx.fillStyle = "rgba(190,10,10," + (0.42 * hf) + ")";
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // portal proximity tint (subtle)
+  for (var i = 0; i < portals.length; i++) {
+    var P = portals[i];
+    var dxp = player.x - P.cx, dzp = player.z - P.cz;
+    var ndp = dxp * P.nx + dzp * P.nz;
+    if (ndp > 0 && ndp < 2.6) {
+      var k = (1 - ndp / 2.6) * 0.20;
+      ctx.fillStyle = P.slot === 0
+        ? "rgba(60,140,255," + k + ")"
+        : "rgba(255,150,50," + k + ")";
+      ctx.fillRect(0, 0, W, H);
+    }
+  }
+
+  // crosshair heat
+  var hot = false;
+  var dirX = Math.cos(player.yaw), dirY = Math.sin(player.yaw);
+  for (var e2 = 0; e2 < enemies.length; e2++) {
+    var en = enemies[e2];
+    if (en.dead || en.removed || en.spawnT > 0) continue;
+    var ex = en.x - player.x, ez = en.z - player.z;
+    var t = ex * dirX + ez * dirY;
+    if (t <= 0.3) continue;
+    var perp = Math.abs(ex * dirY - ez * dirX);
+    if (perp < en.radius + 0.15 && t < 22) { hot = true; break; }
+  }
+  if (hot !== crossEl.__hot) {
+    crossEl.__hot = hot;
+    crossEl.classList.toggle("hot", hot);
+  }
+}
+
+/* =========================================================================
+   21. MAIN UPDATE
+   ========================================================================= */
+function update(dt) {
+  state.time += dt;
+  if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 2.4);
+
+  if (state.demo) {
+    botAct(dt);
+  } else {
+    // keyboard-driven input
+    var f = 0, s = 0;
+    if (keys["w"] || keys["arrowup"]) f += 1;
+    if (keys["s"] || keys["arrowdown"]) f -= 1;
+    if (keys["d"] || keys["arrowright"]) s += 1;
+    if (keys["a"] || keys["arrowleft"]) s -= 1;
+    input.forward = f;
+    input.strafe = s;
+    input.fire = mouseDown;
+  }
+
+  updatePlayer(dt);
+  updateEnemies(dt);
+  updateBullets(dt);
+  updatePickups(dt);
+  updateParticles(dt);
+  updateWaves(dt);
+  updateHUD();
+}
+
+function updateTitle(dt) {
+  state.time += dt;
+  player.yaw += dt * 0.16;
+  player.pitch = Math.sin(state.time * 0.4) * 0.02;
+  // animate portal pickups / particles nothing
+}
+
+/* =========================================================================
+   22. MAIN LOOP
+   ========================================================================= */
+var lastT = 0;
+var perfAcc = 0, perfN = 0;
+
+function loop(now) {
+  requestAnimationFrame(loop);
+  if (!lastT) lastT = now;
+  var dt = (now - lastT) / 1000;
+  lastT = now;
+  if (dt > 0.06) dt = 0.06;
+  if (dt < 0) dt = 0;
+
+  // adaptive resolution safety
+  perfAcc += dt; perfN++;
+  if (perfN >= 50) {
+    var avg = perfAcc / perfN;
+    if (avg > 0.026 && perfScale > 0.62) {
+      perfScale *= 0.85;
+      resize();
+    }
+    perfAcc = 0; perfN = 0;
+  }
+
+  if (state.mode === "playing") {
+    update(dt);
+  } else if (state.mode === "title") {
+    updateTitle(dt);
+  } else {
+    // win / over: keep time flowing for portal animation, let particles settle
+    state.time += dt;
+    updateParticles(dt);
+    if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 2.4);
+    if (player.hurtFlash > 0) player.hurtFlash -= dt;
+  }
+
+  render();
+}
+
+/* =========================================================================
+   23. INPUT
+   ========================================================================= */
+window.addEventListener("keydown", function (e) {
+  var k = e.key.toLowerCase();
+  keys[k] = true;
+  if (k === "escape" && document.pointerLockElement) document.exitPointerLock();
+  if ([" ", "arrowup", "arrowdown", "arrowleft", "arrowright"].indexOf(k) >= 0) {
+    e.preventDefault();
+  }
+});
+window.addEventListener("keyup", function (e) {
+  keys[e.key.toLowerCase()] = false;
+});
+
+canvas.addEventListener("mousedown", function (e) {
+  if (isTouch) return;
+  if (state.mode !== "playing") return;
+  if (!state.demo && document.pointerLockElement !== canvas) {
+    canvas.requestPointerLock();
+  }
+  mouseDown = true;
+  e.preventDefault();
+});
+window.addEventListener("mouseup", function () { mouseDown = false; });
+canvas.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+
+document.addEventListener("mousemove", function (e) {
+  if (document.pointerLockElement !== canvas) return;
+  if (state.mode !== "playing" || state.demo) return;
+  var sens = 0.0022;
+  player.yaw += e.movementX * sens;
+  player.pitch = clamp(player.pitch - e.movementY * 0.0016, -0.30, 0.30);
+});
+
+document.addEventListener("pointerlockchange", function () {
+  if (document.pointerLockElement !== canvas) mouseDown = false;
+});
+
+/* ---------------- touch controls ---------------- */
+var touchState = {
+  moveId: -1, lookId: -1,
+  moveOriginX: 0, moveOriginY: 0,
+  moveX: 0, moveY: 0,
+  lookX: 0, lookY: 0,
+  fireId: -1
+};
+
+var stickEl = document.getElementById("stick");
+var knobEl = document.getElementById("knob");
+var movePad = document.getElementById("movePad");
+var lookPad = document.getElementById("lookPad");
+var fireBtn = document.getElementById("fireBtn");
+
+function showStick(x, y) {
+  stickEl.style.display = "block";
+  stickEl.style.left = (x - 65) + "px";
+  stickEl.style.top = (y - 65) + "px";
+  knobEl.style.left = "50%";
+  knobEl.style.top = "50%";
+}
+function hideStick() { stickEl.style.display = "none"; }
+
+movePad.addEventListener("pointerdown", function (e) {
+  if (state.mode !== "playing") return;
+  touchState.moveId = e.pointerId;
+  touchState.moveOriginX = e.clientX;
+  touchState.moveOriginY = e.clientY;
+  touchState.moveX = 0; touchState.moveY = 0;
+  showStick(e.clientX, e.clientY);
+  try { movePad.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+movePad.addEventListener("pointermove", function (e) {
+  if (e.pointerId !== touchState.moveId) return;
+  var dx = e.clientX - touchState.moveOriginX;
+  var dy = e.clientY - touchState.moveOriginY;
+  var maxR = 60;
+  var mag = Math.hypot(dx, dy);
+  if (mag > maxR) { dx = dx / mag * maxR; dy = dy / mag * maxR; }
+  touchState.moveX = dx / maxR;
+  touchState.moveY = dy / maxR;
+  knobEl.style.left = (50 + (dx / maxR) * 45) + "%";
+  knobEl.style.top = (50 + (dy / maxR) * 45) + "%";
+  e.preventDefault();
+});
+function endMove(e) {
+  if (e.pointerId !== touchState.moveId) return;
+  touchState.moveId = -1;
+  touchState.moveX = 0;
+  touchState.moveY = 0;
+  hideStick();
+}
+movePad.addEventListener("pointerup", endMove);
+movePad.addEventListener("pointercancel", endMove);
+
+lookPad.addEventListener("pointerdown", function (e) {
+  if (state.mode !== "playing") return;
+  touchState.lookId = e.pointerId;
+  touchState.lookX = e.clientX;
+  touchState.lookY = e.clientY;
+  try { lookPad.setPointerCapture(e.pointerId); } catch (err) {}
+  e.preventDefault();
+});
+lookPad.addEventListener("pointermove", function (e) {
+  if (e.pointerId !== touchState.lookId) return;
+  if (state.demo) { touchState.lookX = e.clientX; touchState.lookY = e.clientY; return; }
+  var dx = e.clientX - touchState.lookX;
+  var dy = e.clientY - touchState.lookY;
+  touchState.lookX = e.clientX;
+  touchState.lookY = e.clientY;
+  player.yaw += dx * 0.0055;
+  player.pitch = clamp(player.pitch - dy * 0.0022, -0.30, 0.30);
+  e.preventDefault();
+});
+function endLook(e) {
+  if (e.pointerId !== touchState.lookId) return;
+  touchState.lookId = -1;
+}
+lookPad.addEventListener("pointerup", endLook);
+lookPad.addEventListener("pointercancel", endLook);
+
+fireBtn.addEventListener("pointerdown", function (e) {
+  if (state.mode !== "playing") return;
+  touchState.fireId = e.pointerId;
+  mouseDown = true;
+  e.preventDefault();
+});
+function endFire(e) {
+  if (e.pointerId !== touchState.fireId) return;
+  touchState.fireId = -1;
+  mouseDown = false;
+}
+fireBtn.addEventListener("pointerup", endFire);
+fireBtn.addEventListener("pointercancel", endFire);
+
+// apply stick to input each frame (handled in update via check)
+var _origUpdate = update;
+update = function (dt) {
+  if (isTouch && !state.demo && touchState.moveId >= 0) {
+    input.forward = -touchState.moveY;
+    input.strafe = touchState.moveX;
+  }
+  _origUpdate(dt);
+};
+
+/* ---------------- mute ---------------- */
+var muteBtn = document.getElementById("muteBtn");
+function refreshMuteBtn() {
+  muteBtn.classList.toggle("muted", Audio2.muted);
+  muteBtn.textContent = Audio2.muted ? "SOUND: OFF" : "SOUND: ON";
+  muteBtn.setAttribute("aria-label", Audio2.muted ? "Unmute sound" : "Mute sound");
+  muteBtn.setAttribute("title", Audio2.muted ? "Unmute sound" : "Mute sound");
+}
+muteBtn.addEventListener("click", function (e) {
+  e.stopPropagation();
+  Audio2.resume();
+  Audio2.setMuted(!Audio2.muted);
+  refreshMuteBtn();
+});
+refreshMuteBtn();
+
+/* =========================================================================
+   24. BOOT
+   ========================================================================= */
+resize();
+initPickups();
+player.x = 12; player.z = 12; player.yaw = 0;
+showTitle();
+requestAnimationFrame(loop);
+
+// unlock audio on any first interaction (belt and braces)
+window.addEventListener("pointerdown", function once() {
+  Audio2.resume();
+  window.removeEventListener("pointerdown", once);
+}, { once: true });
+
+})();
+</script>
+</body>
+</html>
